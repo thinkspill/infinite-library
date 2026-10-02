@@ -625,9 +625,13 @@ export class WorldCore<S extends object> {
   listAgents() {
     return this.store.listAgentKeys();
   }
+  // A revoked key is dead everywhere at once: MCP asks for the key on every call, and any socket the agent opened with it
+  // is closed now rather than left working until it drops.
   revokeAgent(id: string) {
     this.rates.delete(id);
-    return this.store.revokeAgentKey(id);
+    const revoked = this.store.revokeAgentKey(id);
+    for (const ws of this.sockets.list()) if (this.playerOf(ws)?.id === id) this.close(ws, 4006, 'key revoked');
+    return revoked;
   }
   async authAgent(key: string): Promise<{ id: string; name: string } | null> {
     if (!/^ssa_[0-9a-f]{48}$/.test(key)) return null;

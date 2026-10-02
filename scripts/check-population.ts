@@ -83,6 +83,29 @@ console.log('\nThe instant\'s index against a plain scan');
   check(badWithin === 0, `within(rule) agrees with a plain scan, 300 places × 3 rules over 3000 people (${badWithin} differ)`);
   check(badNearest === 0, `nearest(PEERS, 32) is the 32 nearest by metres + 20 a floor (${badNearest} differ)`);
 }
+{
+  // launch day: everyone at the spawn, a few metres apart, a few on the stairs a floor up, some across the shaft
+  const rnd = (() => { let s = 11; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const crowd: Entry[] = [];
+  for (let i = 0; i < 400; i++) {
+    const side = rnd() < 0.5 ? 0 : 1, floor = rnd() < 0.1 ? 1 : 0, y = 2 + rnd() * 6, x = -rnd() * 6;
+    const person: Person = { id: 'c' + i, kind: 'human', name: 'n', x, y, floor, side, yaw: 0, state: 'standing' };
+    crowd.push({ id: person.id, ver: '0', json: '', person, side, floor, x, y });
+  }
+  const snap = new Pop.Snapshot(crowd);
+  let bad = 0, ordered = true;
+  for (const me of crowd) {
+    const v = { side: me.side, floor: me.floor, y: me.y };
+    const d = (e: Entry) => Math.abs((Pop.seenAlong(Pop.PEERS, v.side, e) as number) - v.y) + Pop.PEER_FLOOR_METRES * Math.abs(e.floor - v.floor);
+    const all = crowd.filter(e => e.id !== me.id && Pop.isNear(Pop.PEERS, v, e)).map(d).sort((a, b) => a - b);
+    const near = snap.nearest(Pop.PEERS, v, Pop.MAX_PEERS, me.id);
+    const got = near.map(d).sort((a, b) => a - b);
+    if (near.some(e => e.id === me.id) || got.length !== Math.min(Pop.MAX_PEERS, all.length) || got.some((x, i) => Math.abs(x - all[i]) > 1e-9)) bad++;
+    if (near.some((e, i) => i && near[i - 1].id > e.id)) ordered = false;
+  }
+  check(bad === 0, `in a crowd of 400 at the spawn, each sees their own 32 nearest, never themselves (${bad} differ)`);
+  check(ordered, 'and in the same order for the same people (by id), so an unchanged view is not sent again');
+}
 
 console.log('\nWho is held');
 {

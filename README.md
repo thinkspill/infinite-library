@@ -30,17 +30,6 @@ modules it shipped with, even in the seconds after a deploy when an edge can sti
 6 versions stay deployed. Versioned files are cached as immutable. `npm run dev` and `npm run deploy` build first. If
 you edit `web/` while dev is running, run `npm run build` again.
 
-## How it maps onto AWS terms
-
-| Cloudflare | Nearest AWS idea |
-|---|---|
-| Worker (`src/index.ts`) | Lambda@Edge / CloudFront Function that runs in front of everything |
-| Static assets (`web/`) | S3 + CloudFront, but it's in the same deploy |
-| Durable Object `World`, named `world` | A single ECS task with one replica and a sticky name, plus its own attached SQLite file. It is single-threaded, so there are no locks. It sleeps when idle (WebSocket hibernation) and costs nothing while asleep. |
-| DO alarm | One EventBridge schedule owned by that task (used here for the night) |
-| `wrangler dev` | docker-compose for the whole stack, locally, including SQLite |
-| `wrangler deploy` | the one deploy command for everything |
-
 ## Run locally
 
 ```sh
@@ -299,9 +288,10 @@ One Durable Object holds the whole world, so the protocol keeps its work small:
   forward between reports (up to 3 s), so peers stay smooth.
 - **Writes when something happens.** A player's row is written on a floor or side change, a fall, a stop, a
   disconnect, and otherwise once a minute: about 1–2 rows a minute instead of 30.
-- **Neighbours by bucket.** Every 250 ms the world puts everyone present in buckets of side × floor × 140 m, turns each
-  person into JSON once, and sends each socket its 32 nearest (a selection, not a sort) at most twice a second, and
-  only when someone in view has reported or come and gone. Sockets in the same stretch share one gathering.
+- **Neighbours by floor, sorted.** Every 250 ms the world turns each person present into JSON once and keeps each floor's
+  people sorted along the gallery; each socket's 32 nearest are taken outward from where it stands (a few dozen
+  steps, not a look at everyone), sent at most twice a second, and only when someone in view has reported or come
+  and gone (`src/population.ts`).
 - **Asked for, not pushed.** The roster goes to a map that asks for it (every 5 s while open). `/api/finds` and
   `/api/map` are kept 15 and 10 s per Worker instance (workers.dev has no edge cache), and `/api/hello` works out
   night itself without waking the world.
@@ -316,7 +306,7 @@ case: everyone in everyone's view), each moving like the page and pinging every 
 | People | Ping median | 95th percentile | 99th |
 | --- | --- | --- | --- |
 | 100 | 2 ms | 9 ms | 16 ms |
-| 400 | 2–4 ms | 21–47 ms | 32–64 ms |
+| 400 (2026-10-02, after the refactors) | 2 ms | 19 ms | 32 ms |
 | 400, plus 150 turned away | 2 ms | 20 ms | 32 ms |
 | 500 | 20–22 ms | 220–510 ms | 400–700 ms |
 
@@ -328,7 +318,7 @@ each attack below and fails if any works.
 - **Who you are.** A human logs in with a random secret their browser keeps; the server stores only its hash, and the
   only id that ever leaves the server is a random public one (`p_…`). (Until 2026-10-02 the public id *was* the
   secret, so anyone could log in as anyone; players from before then are let in once with the old secret and handed
-  a fresh one, after which the old one is dead.) Agents log in with keys kept as hashes; the owner token is compared
+  a fresh one, after which the old one is dead.) Agents log in with keys kept as hashes (revoking a key closes any socket it opened, at once); the owner token is compared
   in constant time.
 - **The rules of the world.** The server trusts no position, book or find a client reports: moves are held to running
   pace, floors change only at stairs or by falling, sides only by falling across; opening and marking need reach;
@@ -389,7 +379,7 @@ The same key also works as `hello {token}` on the WebSocket.
 
 Public read endpoints: `GET /api/map`, `GET /api/events?since=<id>&limit=<n>`.
 
-## Deploy (not done yet: needs your Cloudflare account and go-ahead)
+## Deploy
 
 ```sh
 npx wrangler login
@@ -398,7 +388,8 @@ npx wrangler deploy                      # → https://library.<you>.workers.dev
 ```
 
 Free tier covers development and a small player base. Workers Paid ($5/month) lifts the daily caps.
-Player positions are written to SQLite at most every 2 s per player to stay inside the free row-write allowance.
+A player's row is written when something happens (a floor, a side, a fall starting or ending, a stop) and otherwise
+once a minute, to stay inside the free row-write allowance. `node scripts/watch.ts` shows the day's use against it.
 
 ## Decisions taken while scaffolding (revisit freely)
 
@@ -426,6 +417,4 @@ Player positions are written to SQLite at most every 2 s per player to stay insi
 
 - Everyone's finds glowing for everyone: the leaderboard exists, but only your own scanner lights spines.
 - A cron-triggered Worker that wakes resident agents while nobody is online.
-- Touch controls for notes and the map.
 - Porting the gallery layout to the Unreal project (Windows PC).
-# infinite-library

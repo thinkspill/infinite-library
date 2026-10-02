@@ -120,16 +120,47 @@ export class Snapshot {
   within(rule: Nearness, v: Spot, except?: string): Entry[] {
     return this.around(rule, v).filter(pl => pl.e.id !== except && Math.abs(pl.y - v.y) <= rule.metres).map(pl => pl.e);
   }
-  /** The k nearest within `rule` of v but `except`, by metres along plus PEER_FLOOR_METRES a floor, in no particular order. */
+  // One floor's people as `side` sees them, sorted along the gallery (built once a tick, on first use).
+  private sorted = new Map<string, Placed[]>();
+  private line(side: number, floor: number, acrossShaft: boolean): Placed[] | undefined {
+    const key = `${side}/${floor}/${acrossShaft ? 1 : 0}`;
+    let l = this.sorted.get(key);
+    if (l) return l;
+    const cells = this.views[side].get(floor);
+    if (!cells) return undefined;
+    l = [];
+    for (const bk of cells.values()) for (const pl of bk) if (acrossShaft || pl.e.side === side) l.push(pl);
+    l.sort((a, b) => a.y - b.y);
+    this.sorted.set(key, l);
+    return l;
+  }
+  /**
+   * The k nearest within `rule` of v but `except`, by metres along plus PEER_FLOOR_METRES a floor, ordered by id (so
+   * the same people give the same list). Asked for every socket on every tick, so it doesn't look at everyone: each
+   * floor in reach is kept sorted along the gallery, and the nearest are taken outward from v, floor by floor.
+   */
   nearest(rule: Nearness, v: Spot, k: number, except?: string): Entry[] {
-    const cand = this.around(rule, v), idx: number[] = [], dist: number[] = [];
-    for (let i = 0; i < cand.length; i++) {
-      const pl = cand[i], d = Math.abs(pl.y - v.y);
-      if (pl.e.id !== except && d <= rule.metres) { idx.push(i); dist.push(d + PEER_FLOOR_METRES * Math.abs(pl.e.floor - v.floor)); }
+    const lines: Placed[][] = [], below: number[] = [], above: number[] = [], pen: number[] = [];
+    for (let f = v.floor - rule.floors; f <= v.floor + rule.floors; f++) {
+      const l = this.line(v.side, f, rule.acrossShaft); if (!l || !l.length) continue;
+      let lo = 0, hi = l.length;   // first at or past v.y
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (l[mid].y < v.y) lo = mid + 1; else hi = mid; }
+      lines.push(l); above.push(lo); below.push(lo - 1); pen.push(PEER_FLOOR_METRES * Math.abs(f - v.floor));
     }
-    const n = selectNearest(idx, dist, k), out: Entry[] = [];
-    for (let j = 0; j < n; j++) out.push(cand[idx[j]].e);
-    return out;
+    const out: Entry[] = [];
+    while (out.length < k) {
+      // the next nearest is the nearest of each floor's two frontiers
+      let best = -1, bestUp = false, bestD = Infinity;
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (below[i] >= 0) { const dy = v.y - l[below[i]].y; if (dy <= rule.metres && dy + pen[i] < bestD) { bestD = dy + pen[i]; best = i; bestUp = false; } }
+        if (above[i] < l.length) { const dy = l[above[i]].y - v.y; if (dy <= rule.metres && dy + pen[i] < bestD) { bestD = dy + pen[i]; best = i; bestUp = true; } }
+      }
+      if (best < 0) break;
+      const pl = bestUp ? lines[best][above[best]++] : lines[best][below[best]--];
+      if (pl.e.id !== except) out.push(pl.e);
+    }
+    return out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
 }
 
@@ -194,18 +225,4 @@ export class Population<P extends Player = Player> {
     }
     return new Snapshot(entries);
   }
-}
-
-// Moves the k smallest dist (with their idx alongside) to the front, in no particular order; returns how many (≤ k).
-// Quickselect: linear on average, where a sort would be n log n for every socket on every tick.
-export function selectNearest(idx: number[], dist: number[], k: number) {
-  const n = idx.length; if (n <= k) return n;
-  let lo = 0, hi = n - 1;
-  const swap = (a: number, b: number) => { let t = idx[a]; idx[a] = idx[b]; idx[b] = t; t = dist[a]; dist[a] = dist[b]; dist[b] = t; };
-  while (lo < hi) {
-    const pivot = dist[(lo + hi) >> 1]; let i = lo, j = hi;
-    while (i <= j) { while (dist[i] < pivot) i++; while (dist[j] > pivot) j--; if (i <= j) { swap(i, j); i++; j--; } }
-    if (k - 1 <= j) hi = j; else if (k - 1 >= i) lo = i; else break;
-  }
-  return k;
 }

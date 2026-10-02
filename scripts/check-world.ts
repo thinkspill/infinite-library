@@ -118,6 +118,8 @@ console.log('Hello');
   const bad = await w.hello({ token: 'ssa_' + '0'.repeat(48) });
   check(bad.last('error')?.reason === 'unknown or revoked key' && !bad.last('welcome'), 'an unknown key is refused');
   w.core.revokeAgent(minted.id);
+  check(ag.closedWith?.code === 4006, `revoking the key closes the agent's open socket too (${ag.closedWith?.code} ${ag.closedWith?.reason})`);
+  w.deliverCloses();
   const rev = await w.hello({ token: minted.key });
   check(rev.last('error')?.reason === 'unknown or revoked key', 'a revoked one too');
   const none = w.connect()!; await w.say(none, { t: 'hello' });
