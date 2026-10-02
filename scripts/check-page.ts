@@ -1,14 +1,14 @@
 // Checks the page in a real (headless) Chrome against a running server: desktop, phone and walking. Uses
 // scripts/browser.ts, so several runs at once don't collide.
 // Run: node scripts/check-page.ts [base]        base defaults to http://127.0.0.1:8787 (npm run dev)
-//      node scripts/check-page.ts --prod [base] production (https://library.short-stay.workers.dev): read-only
+//      node scripts/check-page.ts --prod [base] production (https://finitelibrary.fyi): read-only
 // A page that connects joins the world as a player, so --prod is required for any non-local base, and with it no
 // WebSocket can open (window.WebSocket is replaced before the page runs; checked: no socket, no 'hello' frame sent).
 // Options: --only=desktop,phone,walk   --shots=<dir> to save screenshots.
 import { launch, sleep, frameType, type Page } from './browser.ts';
 
 const args = process.argv.slice(2), flag = (n: string) => args.find((a: string) => a === `--${n}` || a.startsWith(`--${n}=`));
-const PROD = !!flag('prod'), BASE = (args.find((a: string) => !a.startsWith('--')) ?? (PROD ? 'https://library.short-stay.workers.dev' : 'http://127.0.0.1:8787')).replace(/\/$/, '');
+const PROD = !!flag('prod'), BASE = (args.find((a: string) => !a.startsWith('--')) ?? (PROD ? 'https://finitelibrary.fyi' : 'http://127.0.0.1:8787')).replace(/\/$/, '');
 const ONLY = flag('only')?.split('=')[1]?.split(',') ?? ['desktop', 'phone', 'walk'], SHOTS = flag('shots')?.split('=')[1];
 const URL_ = `${BASE}/short-stay-library`;
 if (!/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(BASE) && !PROD) {

@@ -21,11 +21,18 @@ async function cached(key: string, ttlS: number, get: () => Promise<unknown>) {
   return value;
 }
 
+const CANONICAL = 'finitelibrary.fyi', REDIRECT_TO_CANONICAL = false;
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const world = env.WORLD.get(env.WORLD.idFromName('world'));
 
+    // The library lives at CANONICAL; the front page anywhere else (workers.dev, www) sends you there. Only the front
+    // page: sockets, the API and agents keep working at whatever address they were given.
+    // (off until the domain resolves: turn on by setting REDIRECT_TO_CANONICAL = true)
+    if (REDIRECT_TO_CANONICAL && url.pathname === '/' && url.hostname !== CANONICAL && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1')
+      return Response.redirect(`https://${CANONICAL}/${url.search}`, 301);
     if (url.pathname === '/') return env.ASSETS.fetch(new Request(new URL('/short-stay-library', url), req));
     if (url.pathname === '/ws') return world.fetch(req);
     if (url.pathname === '/mcp') return handleMcp(req, env, ctx, world);

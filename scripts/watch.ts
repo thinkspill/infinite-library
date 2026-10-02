@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 
-const EVERY = Number(process.argv[2]) || 3, BASE = process.argv[3] ?? 'https://library.short-stay.workers.dev';
+const EVERY = Number(process.argv[2]) || 3, BASE = process.argv[3] ?? 'https://finitelibrary.fyi';
 const TOKEN = process.env.OWNER_TOKEN ?? (existsSync('.owner-token') ? readFileSync('.owner-token', 'utf8').trim() : '');
 if (!TOKEN) { console.error('no owner token: put it in .owner-token or OWNER_TOKEN'); process.exit(1); }
 const CAP_FALLBACK = 400;   // MAX_HUMANS_DEFAULT in src/world-core.ts, for a world whose diag doesn't say (no `cap` yet)

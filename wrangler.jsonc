@@ -20,5 +20,13 @@
     "NIGHT_PERIOD_S": "86400",
     "NIGHT_OFFSET_S": "0"
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // The library's own address (Cloudflare makes the DNS records and certificates). workers.dev stays on, so old links
+  // and connections still work; its front page redirects here (src/index.ts CANONICAL).
+  "workers_dev": true,   // keep the old address answering (adding routes would otherwise switch it off)
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "finitelibrary.fyi", "custom_domain": true },
+    { "pattern": "www.finitelibrary.fyi", "custom_domain": true }
+  ]
 }
