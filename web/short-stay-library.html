@@ -377,6 +377,8 @@
       <p>So a book is really just a number: a very long number, 1,312,000 digits long, where each digit has 29 possible values. Every such number is a different book, and every possible book is one of them. There are 29<sup>1,312,000</sup> of them, a number with 1,918,667 digits.</p>
       <p>Every place on a shelf has a number too: which side of the shaft, which floor, how far along, which shelf, which book. A fixed recipe turns a place's number into a book's number, and the recipe can always be run backwards. Two places never get the same book, and no book is left without a place.</p>
       <p>So nothing is stored and nothing is made up. When you open a book, your own computer works it out from where it sits. It is the same every time, for everyone, and it was the same before you looked.</p>
+      <p>Mathematicians call this a bijection, a perfect pairing: like a cloakroom where every coat has its own ticket and every ticket its own coat. No two places share a book, no book is left without a place, and you can always go from one to the other in either direction. The recipe is a few such pairings in a row, and a chain of perfect pairings is still a perfect pairing.</p>
+      <p>Where does it end? The shelves go on forever, but books don't: there are exactly 29<sup>1,312,000</sup> of them, a vast but finite number. So the books fill a gigantic square of floors and metres on each side of the shaft, and past its edge the shelves would be empty. You start in its exact middle. The edge is about 10<sup>959,000</sup> floors away in every direction, so nobody will ever see it.</p>
       <p>That is also why search works. Run the recipe backwards from any text, and it names the one place whose book begins with it. Short texts are close; a sentence is farther than anyone could walk; and the book that is nothing but your name is about 10<sup>959,000</sup> floors away.</p>
     </div>
     <div id="howDeepPane" hidden>
@@ -391,10 +393,17 @@
       <p><code>search(text)</code> writes the text at the top of page 1, lets everything after it fall as it would, and runs steps 3, 2 and 1 backwards. Every character before the text would cost a digit of the number, so the top of page 1 is the nearest place: an n-character text lands about 10<sup>0.73 n</sup> floors and metres out, about where its nearest copy would be in a random library.</p>
       <h3>Why nothing is missing</h3>
       <ul>
-        <li>Each step is invertible, and the code implements both directions; a composition of bijections is a bijection.</li>
+        <li>Each step is a bijection, a perfect pairing in which every input has exactly one output and every output exactly one input, and the code implements both directions. So you can go forwards (shelf → number → scrambled number → text) or backwards through the same steps, and the chain is a perfect pairing too.</li>
         <li>So every text of 1,312,000 symbols is the book at exactly one address, and every address within the library holds exactly one book.</li>
         <li>The reader never sees your search: it rebuilds a book from its address alone. If search lied, the page would not say what it claims. You can check that below, or with the file itself.</li>
         <li>It is not cryptographic: well mixed, but anyone with the file can compute anything. Nothing here is hidden; it is only vast.</li>
+      </ul>
+      <h3>The edge, and the middle</h3>
+      <ul>
+        <li>Addresses are unbounded and books are not: the pairing in step 1 uses up the first 29<sup>1,312,000</sup> addresses in its numbering and leaves every later one without a book.</li>
+        <li>The zig-zag (0, −1, 1, −2, …) gives negative and positive positions turns, and the interleaving takes floor and unit digits alternately, so the numbers fill outward evenly from floor 0, unit 0: a square roughly 10<sup>959,000</sup> floors and metres in every direction, on each side of the shaft. The spawn, 4 m along floor 0, is at its centre.</li>
+        <li>Past the edge, <code>bookNumber</code> returns nothing, and the library refuses the address: “that shelf lies past the end of the library”. (The drawn spines would still look full; they are decoration and don't know where the edge is.) Search can never land there, since every text's book is inside.</li>
+        <li>The middle isn't special. Book 0, the very first, is as much noise as any other, because the scramble and the chained pages mix every number into random-looking text. The centre is a centre of numbering, not of meaning.</li>
       </ul>
     </div>
     <div class="proof">
