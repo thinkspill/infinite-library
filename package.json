@@ -1,0 +1,28 @@
+{
+  "name": "short-stay",
+  "version": "1.0.0",
+  "description": "A Short Stay in Hell: the library, multiplayer",
+  "scripts": {
+    "build": "node scripts/build.ts",
+    "dev": "node scripts/build.ts && wrangler dev",
+    "types": "wrangler types",
+    "check": "tsc",
+    "test": "node scripts/check-library.ts && node scripts/check-stream.ts && node scripts/check-body.ts && node scripts/check-geometry.ts && node scripts/check-protocol.ts && node scripts/check-store.ts && node scripts/check-session.ts && node scripts/check-walk.ts && node scripts/check-finder.ts && node scripts/check-mapview.ts && node scripts/check-world.ts && node scripts/check-population.ts && node scripts/check-modes.ts && node scripts/check-book.ts && node scripts/check-proofs.ts && node scripts/check-frame.ts && node scripts/check-near.ts && node scripts/check-scan.ts && node scripts/smoke.ts && node scripts/attack.ts",
+    "test:page": "node scripts/check-page.ts",
+    "test:gpu": "node scripts/check-scan-gpu.ts",
+    "deploy": "node scripts/build.ts && wrangler deploy"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260929.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.143.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "agents": "^0.24.0",
+    "zod": "^4.6.5"
+  },
+  "private": true
+}

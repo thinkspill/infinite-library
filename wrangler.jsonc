@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "library",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // The page and everything else in dist/ (built from web/) is served straight from the edge; the Worker only sees
+  // requests that match no file (/, /ws, /mcp, /api/*).
+  // dist/ is web/ plus versioned copies of the page's modules (scripts/build.ts; npm run dev and deploy build it)
+  "assets": { "directory": "./dist", "binding": "ASSETS" },
+  // web/words.txt is imported by the server as a string, to check finds players claim for the leaderboard.
+  "rules": [{ "type": "Text", "globs": ["**/*.txt"], "fallthrough": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "WORLD", "class_name": "World" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["World"] }],
+  "vars": {
+    // Night boundary: every NIGHT_PERIOD_S seconds, offset NIGHT_OFFSET_S from the Unix epoch.
+    // Production default is one real day, falling at 00:00 UTC. .dev.vars compresses it for testing.
+    "NIGHT_PERIOD_S": "86400",
+    "NIGHT_OFFSET_S": "0"
+  },
+  "observability": { "enabled": true }
+}

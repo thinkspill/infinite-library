@@ -1,0 +1,1929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A Short Stay in Hell</title>
+<meta name="description" content="Every possible 410-page book, each exactly once, on endless shelves. Walk the library from Steven L. Peck's novel, search for any text, and find the book that is only your name.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="A Short Stay in Hell">
+<meta property="og:title" content="A Short Stay in Hell: the library of every possible book">
+<meta property="og:description" content="Every possible 410-page book, each exactly once, on endless shelves. Walk the library from Steven L. Peck's novel, search for any text, and find the book that is only your name.">
+<meta property="og:url" content="https://library.short-stay.workers.dev/">
+<meta property="og:image" content="https://library.short-stay.workers.dev/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A lamplit gallery of identical red books in perfect rows, running to a vanishing point beside a railing over the shaft.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="vendor/fonts/fonts.css">
+<style>
+  :root {
+    --ink: #0b0906;
+    --bone: #d8cbb0;
+    --bone-dim: #9c9078;
+    --paper: #efe6cf;
+    --paper-ink: #2a2118;
+    --paper-rule: #b8ab8e;
+    --scrim: rgba(11, 9, 6, 0.62);
+    --glass: rgba(14, 11, 8, 0.74);          /* behind text laid over the scene: the lamp strip and the shelves are bright and busy */
+    --glass-edge: rgba(216, 203, 176, 0.14);
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+    --serif: "EB Garamond", Garamond, "Times New Roman", serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--ink); color: var(--bone);
+    font-family: var(--mono); font-size: 14px; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas#view { display: block; width: 100vw; height: 100vh; }
+
+  /* ---- HUD ---- */
+  #hud {
+    position: fixed; top: 14px; left: 16px; padding: 12px 16px;
+    max-width: min(560px, calc(100vw - min(330px, 44vw) - 72px));
+    background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 3px; backdrop-filter: blur(6px);
+    pointer-events: none; display: flex; flex-direction: column; gap: 4px;
+    text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.7);
+    font-variant-numeric: tabular-nums;
+  }
+  #hud .where { font-size: 17px; letter-spacing: .02em; color: var(--bone-dim); }
+  #hud .where b { font-weight: 500; color: var(--bone); }
+  #hud kbd { font: inherit; color: var(--bone); }
+  #hud button { pointer-events: auto; font: inherit; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; background: none; color: var(--bone-dim);
+    border: 1px solid rgba(216,203,176,.25); padding: 0 6px; margin-left: .6em; cursor: pointer; border-radius: 2px; }
+  #hud button:hover { color: var(--bone); }
+  #hud .extra { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+  #hud .extra[hidden] { display: none; }
+  #hud .line { color: var(--bone-dim); font-size: 12px; max-width: 70ch; line-height: 1.45; }
+  #hud .line em { color: var(--bone); font-style: normal; }
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+    border-radius: 50%; background: var(--bone); opacity: .55; pointer-events: none;
+    transition: transform .12s ease, opacity .12s ease;
+  }
+  #crosshair.hot { transform: scale(1.8); opacity: .95; }
+  #prompt {
+    position: fixed; left: 50%; top: calc(50% + 26px); transform: translateX(-50%);
+    font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone);
+    pointer-events: none; opacity: 0; transition: opacity .15s;
+    background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 3px; padding: 5px 10px; backdrop-filter: blur(6px);
+  }
+  #prompt.on { opacity: 1; }
+
+  /* ---- Book ---- */
+  #book {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: var(--scrim); backdrop-filter: blur(2px);
+  }
+  #book.open { display: flex; }
+  .paper {
+    background: var(--paper); color: var(--paper-ink);
+    box-shadow: 0 30px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.25);
+    padding: 22px 26px 18px; max-height: 92vh; overflow: auto;
+    width: 80ch; max-width: calc(100vw - 72px); scrollbar-gutter: stable;   /* as wide as a line of the page, no wider (plus room for a scrollbar) */
+    font-size: min(14px, calc((100vw - 56px) / 53));
+    line-height: 1.28;
+  }
+  .paper .head, .paper .foot {
+    display: flex; justify-content: space-between; gap: 2em; color: #6e6250;
+    font-size: .86em; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .paper .head { border-bottom: 1px solid var(--paper-rule); padding-bottom: .7em; margin-bottom: .9em; flex-wrap: wrap; row-gap: .3em; }
+  .paper .head #bAddr { flex: 1 1 30ch; overflow-wrap: anywhere; }
+  .paper .head #bPage { white-space: nowrap; }
+  .paper .foot { border-top: 1px solid var(--paper-rule); padding-top: .7em; margin-top: .9em; }
+  .paper pre { margin: 0; font: inherit; white-space: pre; tab-size: 4; }
+  .paper .foot kbd { font: inherit; color: #6e6250; }
+
+  .paper .finds { font-size: .86em; color: #6e6250; margin: -.3em 0 .9em; display: flex; flex-wrap: wrap; gap: .4em 1.2em; }
+  .paper .finds button { font: inherit; color: var(--paper-ink); background: none; border: 0; border-bottom: 1px dotted #6e6250; padding: 0; cursor: pointer; }
+  .paper .finds button.on { border-bottom-style: solid; }
+  .paper pre mark { background: #e9c46a; color: var(--paper-ink); box-shadow: 0 0 0 2px #e9c46a; }
+
+  /* ---- Nearby finds ---- */
+  #near {
+    position: fixed; top: 14px; right: 16px; width: min(330px, 44vw); pointer-events: none; padding: 12px 14px;
+    background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 3px; backdrop-filter: blur(6px);
+    text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.7); font-variant-numeric: tabular-nums;
+  }
+  #near[hidden] { display: none; }
+  #near .head { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--bone-dim); }
+  #near .head kbd { font: inherit; color: var(--bone); }
+  #near .status { font-size: 11px; color: var(--bone-dim); margin-top: 2px; }
+  #near ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+  #near li { border-left: 2px solid #b8913f; padding-left: 9px; }
+  #near li.here { border-left-color: #f2c75c; }
+  #near .phrase { font-family: var(--serif); font-size: 19px; color: var(--paper); line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  #near .where { font-size: 11px; color: var(--bone-dim); line-height: 1.5; }
+  #near .where b { color: var(--bone); font-weight: 500; }
+  #near .empty { font-size: 12px; color: var(--bone-dim); }
+  .tag { font-family: var(--mono); font-weight: 600; background: var(--paper); color: var(--paper-ink); padding: 0 .35em; border-radius: 2px; text-shadow: none; letter-spacing: .02em; }
+
+  /* ---- Entry card ---- */
+  #entry {
+    position: fixed; inset: 0; display: flex; align-items: safe center; justify-content: center; overflow-y: auto;
+    background: radial-gradient(ellipse at 50% 40%, rgba(60,40,20,.55), rgba(11,9,6,.92) 70%);
+    padding: 24px;
+  }
+  #entry.hidden { display: none; }
+  .card {
+    max-width: 560px; width: 100%; font-family: var(--serif); color: var(--bone);
+    background: rgba(11,9,6,.72); border: 1px solid rgba(216,203,176,.18); padding: 36px 40px 32px;
+  }
+  .card h1 { font-weight: 400; font-size: 44px; margin: 0 0 6px; letter-spacing: .01em; line-height: 1.05; text-wrap: balance; }
+  .card .sub { font-style: italic; color: var(--bone-dim); margin: 0 0 24px; font-size: 19px; }
+  .card .lede { font-size: 21px; line-height: 1.45; color: var(--paper); }
+  .card p { font-size: 18px; line-height: 1.5; margin: 0 0 14px; max-width: 60ch; }
+  .card .tool { border-left: 2px solid #b8913f; padding-left: 14px; margin-top: 18px; }
+  .card .keys { font-family: var(--mono); font-size: 12px; color: var(--bone-dim); line-height: 1.7; margin: 22px 0; }
+  .card dl.keys { display: grid; grid-template-columns: max-content 1fr; gap: 5px 16px; }
+  .card dl.keys > div { display: contents; }
+  .card dl.keys[hidden] { display: none; }
+  .card dl.keys dt { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; padding-top: 1px; }
+  .card dl.keys dd { margin: 0; }
+  .card .keys b { color: var(--bone); font-weight: 500; }
+  .card button {
+    font: 500 13px var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    background: var(--bone); color: var(--ink); border: 0; padding: 14px 22px; cursor: pointer;
+  }
+  .card button:hover { background: #fff5dc; }
+  .card button:focus-visible { outline: 2px solid #fff5dc; outline-offset: 3px; }
+
+  /* ---- Touch controls ---- */
+  #touch { position: fixed; right: 16px; bottom: 16px; display: none; gap: 10px; }
+  #touch.on { display: flex; }
+  #touch button {
+    font: 500 12px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+    background: rgba(216,203,176,.16); color: var(--bone); border: 1px solid rgba(216,203,176,.35);
+    padding: 16px 18px; border-radius: 3px; touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  #touch button.down { background: rgba(216,203,176,.4); }
+  /* ---- Multiplayer ---- */
+  #notice {
+    position: fixed; left: 50%; top: 22%; transform: translateX(-50%); max-width: min(560px, calc(100vw - 32px));
+    font-family: var(--serif); font-style: italic; font-size: 20px; line-height: 1.35; text-align: center; color: var(--paper);
+    background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 3px; padding: 10px 18px; backdrop-filter: blur(6px);
+    pointer-events: none; opacity: 0; transition: opacity .6s;
+  }
+  #notice.on { opacity: 1; }
+  .paper .marks { margin-top: .8em; font-family: var(--serif); font-size: 1.15em; line-height: 1.35; color: #5a2a1c; }
+  .paper .marks div { border-left: 2px solid #9c3a24; padding-left: .6em; margin-top: .35em; }
+  .paper .marks small { color: #6e6250; font-family: var(--mono); font-size: .72em; letter-spacing: .06em; }
+  .paper .note { display: flex; gap: .6em; margin-top: .8em; }
+  .paper .note[hidden] { display: none; }
+  .paper .note input {
+    flex: 1; min-width: 0; font: 1.05em var(--serif); color: var(--paper-ink); background: rgba(255,255,255,.35);
+    border: 1px solid var(--paper-rule); padding: .35em .5em;
+  }
+  .paper .note input:focus-visible, .paper .note button:focus-visible { outline: 2px solid #9c3a24; outline-offset: 1px; }
+  .paper .note button {
+    font: 500 .8em var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--paper);
+    background: #5a4632; border: 0; padding: .4em .8em; cursor: pointer;
+  }
+  #map {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--scrim); padding: 16px; z-index: 30;
+  }
+  #map[hidden] { display: none; }
+  /* ---- How it works ---- */
+  #help-dlg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); padding: 16px; z-index: 30; }
+  #help-dlg[hidden] { display: none; }
+  #help-dlg .card3 { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: rgba(11,9,6,.96); border: 1px solid rgba(216,203,176,.2); padding: 18px 22px; }
+  #help-dlg .head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone-dim); }
+  #help-dlg .head kbd { font: inherit; color: var(--bone); }
+  #help-dlg p { font-family: var(--serif); font-size: 16px; line-height: 1.5; color: var(--bone); margin: 8px 0; }
+  #help-dlg .keys { margin: 14px 0 0; border-top: 1px solid rgba(216,203,176,.14); padding-top: 10px; font: 12px/1.7 var(--mono); color: var(--bone-dim); }
+  #help-dlg .keys > div { display: grid; grid-template-columns: 4.5em 1fr; gap: 1em; margin: 4px 0; }
+  #help-dlg .keys dt { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone-dim); }
+  #help-dlg .keys dd { margin: 0; color: var(--bone); }
+  #help-dlg .keys b { color: var(--paper); font-weight: 600; }
+  #help-dlg a { color: #f2c75c; }
+  #how-dlg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); padding: 16px; z-index: 30; }
+  #how-dlg[hidden] { display: none; }
+  #how-dlg .card3 { width: min(720px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: rgba(11,9,6,.96); border: 1px solid rgba(216,203,176,.2); padding: 18px 22px 18px; }
+  #how-dlg .head { display: flex; justify-content: space-between; align-items: center; gap: 1em; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone-dim); }
+  #how-dlg .head kbd { font: inherit; color: var(--bone); }
+  #how-dlg .tabs { display: flex; gap: 6px; margin: 12px 0 4px; }
+  #how-dlg .tabs button { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; background: none; color: var(--bone-dim); border: 1px solid rgba(216,203,176,.2); padding: 4px 10px; cursor: pointer; }
+  #how-dlg .tabs button.on { color: var(--bone); border-color: rgba(216,203,176,.6); }
+  #how-dlg h3 { font: 600 15px var(--serif); color: var(--paper); margin: 16px 0 4px; }
+  #how-dlg p, #how-dlg li { font-family: var(--serif); font-size: 16px; line-height: 1.5; color: var(--bone); margin: 6px 0; }
+  #how-dlg ol, #how-dlg ul { padding-left: 1.3em; margin: 6px 0; }
+  #how-dlg code { font: 13px var(--mono); color: var(--paper); }
+  #how-dlg .big { font: 500 13px var(--mono); color: var(--paper); }
+  #how-dlg a { color: #f2c75c; }
+  #how-dlg .proof { border: 1px solid rgba(242,199,92,.35); background: rgba(242,199,92,.05); padding: 10px 14px 12px; margin: 14px 0 0; }
+  #how-dlg .proof h3 { margin-top: 4px; }
+  #how-dlg .proof .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 0; }
+  #how-dlg .proof button { font: 500 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; background: var(--bone); color: var(--ink); border: 0; padding: 8px 14px; cursor: pointer; }
+  #how-dlg .proof input { flex: 1; min-width: 12em; font: 14px var(--mono); background: #1b1510; color: var(--paper); border: 1px solid rgba(216,203,176,.3); padding: 7px 9px; }
+  #how-dlg .out { font: 12px/1.6 var(--mono); color: var(--bone-dim); margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #how-dlg .out b { color: var(--bone); font-weight: 500; }
+  #how-dlg .out mark { background: rgba(242,199,92,.35); color: var(--paper); }
+  #how-dlg .out .yes { color: #9ccf8f; }
+  #how-dlg .out .no { color: #e08a6a; }
+  .xclose { position: fixed; top: 10px; right: 10px; z-index: 45; font: 500 12px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+    background: rgba(11,9,6,.9); color: var(--bone); border: 1px solid rgba(216,203,176,.35); padding: 10px 14px; border-radius: 3px; cursor: pointer; }
+  .card .nogl { border-left: 2px solid #e08a6a; padding-left: 14px; color: var(--paper); }
+  .card .privacy { font: 11px/1.55 var(--mono); color: var(--bone-dim); margin: 16px 0 0; opacity: .8; }
+  .card .how { background: none; color: var(--bone); border: 1px solid rgba(216,203,176,.35); margin-left: 10px; }
+  #finder-dlg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--scrim); padding: 16px; z-index: 30; }
+  #finder-dlg[hidden] { display: none; }
+  #finder-dlg .card2 { width: min(640px, 100%); background: rgba(11,9,6,.95); border: 1px solid rgba(216,203,176,.2); padding: 18px 20px 16px; }
+  #finder-dlg .head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone-dim); }
+  #finder-dlg .head kbd { font: inherit; color: var(--bone); }
+  #finder-dlg .mine { border: 1px solid rgba(242,199,92,.35); background: rgba(242,199,92,.06); padding: 10px 12px; margin: 10px 0 12px; font-size: 12px; line-height: 1.6; color: var(--bone-dim); }
+  #finder-dlg .mine b { color: var(--bone); font-weight: 500; }
+  #finder-dlg .mine q { font-family: var(--serif); font-size: 16px; color: var(--paper); }
+  #finder-dlg .mine button { margin: 8px 8px 0 0; }
+  #finder-dlg .why { font-family: var(--serif); font-size: 16px; line-height: 1.45; color: var(--bone); margin: 10px 0 12px; }
+  #finder-dlg textarea { width: 100%; box-sizing: border-box; font: 15px/1.4 var(--mono); background: #1b1510; color: var(--paper); border: 1px solid rgba(216,203,176,.3); padding: 10px; resize: vertical; }
+  #finder-dlg .opts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 10px; font-size: 12px; color: var(--bone-dim); }
+  #finder-dlg .opts input[type=number] { width: 5em; font: 12px var(--mono); background: #1b1510; color: var(--paper); border: 1px solid rgba(216,203,176,.3); padding: 4px 6px; }
+  #finder-dlg #fCount { margin-left: auto; }
+  #finder-dlg button { font: 500 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; background: var(--bone); color: var(--ink); border: 0; padding: 9px 16px; cursor: pointer; }
+  #finder-dlg button:disabled { opacity: .45; cursor: default; }
+  #finder-dlg .out { margin-top: 14px; border-top: 1px solid rgba(216,203,176,.14); padding-top: 12px; font-size: 12px; line-height: 1.7; color: var(--bone-dim); }
+  #finder-dlg .out b { color: var(--bone); font-weight: 500; }
+  #finder-dlg .out .bad { color: #e08a6a; }
+  #finder-dlg .out button { margin-top: 10px; margin-right: 8px; }
+  #finder-dlg button.quiet { background: none; color: var(--bone); border: 1px solid rgba(216,203,176,.3); }
+  #map .mapcard {
+    background: rgba(11,9,6,.94); border: 1px solid rgba(216,203,176,.2); padding: 18px 20px 14px;
+    width: min(760px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+  }
+  #map .head, #map .foot { display: flex; justify-content: space-between; gap: 1em; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--bone-dim); }
+  #map canvas { display: block; width: 100%; aspect-ratio: 720 / 420; margin: 10px 0; cursor: grab; touch-action: none; }
+  #map canvas.dragging { cursor: grabbing; }
+  #map .zoom { display: flex; gap: 6px; margin-left: auto; }
+  #map .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  #map .tabs button { font: inherit; letter-spacing: inherit; text-transform: inherit; background: none; color: var(--bone-dim); border: 1px solid rgba(216,203,176,.2); padding: 2px 8px; cursor: pointer; }
+  #map .tabs button.on { color: var(--bone); border-color: rgba(216,203,176,.6); }
+  #map .zoom button { font: 500 14px var(--mono); width: 28px; height: 24px; background: none; color: var(--bone); border: 1px solid rgba(216,203,176,.35); cursor: pointer; }
+  #map ol { margin: 0 0 10px; padding: 0; list-style: none; font-size: 12px; color: var(--bone-dim); columns: 2 260px; }
+  #map li b { color: var(--bone); font-weight: 500; }
+  #map #mapList { columns: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 2em; overflow-x: hidden; }
+  #map #mapList li { display: flex; align-items: baseline; gap: .3em; white-space: nowrap; overflow: hidden; break-inside: avoid; padding: 1px 0; }
+  #map #mapList li span { overflow: hidden; text-overflow: ellipsis; }
+  #map #mapList li small { margin-left: auto; padding-left: .8em; font-size: 11px; opacity: .6; flex-shrink: 0; }
+  #map #boardList li.empty { display: block; color: var(--bone-dim); }
+  #map .foot span:first-child { flex: 1; }
+  #map .foot span:last-child { white-space: nowrap; }
+  #map li.me b { color: #f1c27d; }
+  #map #boardList { columns: auto; max-height: 30vh; overflow: auto; margin: 8px 0 14px; }
+  #map #mapList { max-height: 18vh; overflow: auto; margin-top: 8px; }
+  #map #boardList li { display: grid; grid-template-columns: 2.4em 1fr auto; gap: .8em; align-items: baseline; padding: 3px 0; border-top: 1px solid rgba(216,203,176,.08); }
+  #map #boardList .rk { color: var(--bone-dim); text-align: right; }
+  #map #boardList .ph { font-family: var(--serif); font-size: 17px; color: var(--paper); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #map #boardList .by { font-size: 11px; white-space: nowrap; }
+  #map #boardList li.me .by b { color: #f1c27d; }
+  .card label.name { display: flex; align-items: center; gap: 12px; margin: 0 0 18px; font: 12px var(--mono); color: var(--bone-dim); letter-spacing: .08em; text-transform: uppercase; }
+  .card label.name input {
+    flex: 1; min-width: 0; font: 18px var(--serif); color: var(--bone); background: rgba(216,203,176,.08);
+    border: 1px solid rgba(216,203,176,.3); padding: 8px 10px; text-transform: none; letter-spacing: 0;
+  }
+  .card label.name input:focus-visible { outline: 2px solid #fff5dc; outline-offset: 2px; }
+  .card label.name[hidden] { display: none; }
+  @media (max-width: 640px) {
+    #hud .where { font-size: 14px; }
+    #hud .line { font-size: 11px; }
+    /* a phone is too narrow for the two panels side by side: where you are across the top, words nearby along the
+       bottom above the buttons, shorter, so the middle of the view (and the dot) stays clear */
+    #hud { left: 10px; right: 10px; top: 10px; max-width: none; padding: 9px 12px; }
+    #near { top: auto; left: 10px; right: 10px; bottom: 92px; width: auto; max-height: 30vh; overflow: hidden; padding: 9px 12px; }
+    #near ol { gap: 6px; margin-top: 6px; }
+    #near .phrase { font-size: 16px; -webkit-line-clamp: 2; }
+    #map, #finder-dlg, #help-dlg, #how-dlg { padding-top: 58px; }   /* room for the close button above the card */
+    #map .mapcard, #help-dlg .card3, #how-dlg .card3, #finder-dlg .card2 { box-sizing: border-box; max-height: calc(100dvh - 74px); overflow: auto; }
+    .card { padding: 26px 22px; }
+    .card h1 { font-size: 32px; }
+    .card p { font-size: 16px; }
+    .card .lede { font-size: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { #crosshair, #prompt { transition: none; } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud" aria-live="polite">
+  <div class="where"><b id="hSide">east</b> side · floor <b id="hFloor">0</b> · <b id="hUnit">0</b> m along</div>
+  <div class="line"><span id="hNet">Alone: nothing here is shared</span><span id="hKeys"> · <kbd>?</kbd> help</span> <span id="hTouch" hidden><button type="button" id="hFind">find</button> <button type="button" id="hMap" class="online-only" hidden>map</button> <button type="button" id="hHelp">help</button></span> <button type="button" id="hMore" aria-expanded="false">more</button></div>
+  <div class="extra" id="hExtra" hidden>
+    <div class="line">This visit: <em id="hBooks">0</em> books passed · <em id="hFallen">0</em> floors fallen</div>
+    <div class="line">Every metre of wall holds 192 books, 6 shelves of 32. The gallery runs both ways without end; across the shaft is the other side, with its own books. In all, every possible 410-page book: <em>29^1,312,000 ≈ 10^1,918,666</em> of them.</div>
+  </div>
+</div>
+<div id="near" hidden>
+  <div class="head">Words nearby · <kbd>L</kbd></div>
+  <div class="status" id="nearStatus"></div>
+  <ol id="nearList"></ol>
+</div>
+
+<div id="crosshair"></div>
+<div id="prompt">E · open this book</div>
+
+<div id="book" role="dialog" aria-label="Open book">
+  <div class="paper">
+    <div class="head"><span id="bAddr">—</span><span id="bPage">page 1 of 410</span></div>
+    <div class="finds" id="bFinds" hidden></div>
+    <pre id="bText"></pre>
+    <div class="marks" id="bMarks"></div>
+    <div class="note" id="bNoteRow" hidden>
+      <button id="bLeave" type="button">Leave it standing open</button>
+    </div>
+    <div class="foot"><span><kbd>←</kbd> <kbd>→</kbd> turn pages</span><span id="bNoteKey" hidden><kbd>O</kbd> leave it open</span><span id="bFindKey" hidden><kbd>G</kbd> next find</span><span><kbd>E</kbd> put it back</span></div>
+  </div>
+</div>
+
+<div id="notice" aria-live="polite"></div>
+
+<div id="finder-dlg" hidden role="dialog" aria-label="Search the library">
+  <div class="card2">
+    <div class="head"><span>Where is it written?</span><span><kbd>Esc</kbd> close</span></div>
+    <p class="why">Every text exists somewhere in the library, once for every place it could sit. Type one, and learn the nearest shelf whose book opens with it. A word may be a walk away; a sentence is farther than anyone could go. You can read it from here<span class="local-only" hidden>, or teleport there</span>. <a href="#" id="howFromSearch" style="color:#f2c75c">How do we know it is there?</a></p>
+    <div id="fMine" class="mine" hidden></div>
+    <textarea id="fText" maxlength="3300" rows="4" spellcheck="false" placeholder="the letters a to z, space, comma and period"></textarea>
+    <div class="opts">
+      <label>Page <input id="fPage" type="number" min="1" max="410" step="1" placeholder="1"></label>
+      <label><input id="fBlank" type="checkbox"> Leave the rest of that page blank</label>
+      <span id="fCount"></span>
+      <button id="fGo" type="button">Search</button>
+    </div>
+    <div class="opts"><button id="fSlip" type="button" class="quiet">Open a call slip…</button><input id="fFile" type="file" accept=".json,application/json" hidden></div>
+    <div id="fOut" class="out" hidden></div>
+  </div>
+</div>
+
+<div id="help-dlg" hidden role="dialog" aria-label="Keys and help">
+  <div class="card3">
+    <div class="head"><span>Keys and help</span><span><kbd>?</kbd> or <kbd>Esc</kbd> close</span></div>
+    <p>This is the library from Steven L. Peck’s <i>A Short Stay in Hell</i>: every possible 410-page book, each exactly once, on shelves that never end.</p>
+    <p>Walk the gallery and open books. Nearly all of them are noise; the word finder points out the rare runs of real English near you, and the rarest go on your side’s leaderboard.</p>
+    <p>Search tells you the shelf where any text is written. Your own book, nothing but your name page after page, is in here too.</p>
+    <p>Across the shaft is the other side, with its own books and its own people. The only way over is to climb the railing and steer as you fall. Marks you leave vanish at night. <a href="#" id="helpHow">How do we know every book is here?</a></p>
+    <div id="helpKeys"></div>
+  </div>
+</div>
+
+<div id="how-dlg" hidden role="dialog" aria-label="How it works">
+  <div class="card3">
+    <div class="head"><span>How this library works</span><span><kbd>Esc</kbd> close</span></div>
+    <div class="tabs"><button type="button" id="howSimple" class="on">Simply</button><button type="button" id="howDeep">In depth</button></div>
+    <div id="howSimplePane">
+      <p>Every book here is 410 pages of 40 lines of 80 characters, in 29 symbols: the letters a to z, the space, the comma and the period. That is 1,312,000 characters, and each can be one of 29 things.</p>
+      <p>So a book is really just a number: a very long number, 1,312,000 digits long, where each digit has 29 possible values. Every such number is a different book, and every possible book is one of them. There are 29<sup>1,312,000</sup> of them, a number with 1,918,667 digits.</p>
+      <p>Every place on a shelf has a number too: which side of the shaft, which floor, how far along, which shelf, which book. A fixed recipe turns a place's number into a book's number, and the recipe can always be run backwards. Two places never get the same book, and no book is left without a place.</p>
+      <p>So nothing is stored and nothing is made up. When you open a book, your own computer works it out from where it sits. It is the same every time, for everyone, and it was the same before you looked.</p>
+      <p>That is also why search works. Run the recipe backwards from any text, and it names the one place whose book begins with it. Short texts are close; a sentence is farther than anyone could walk; and the book that is nothing but your name is about 10<sup>959,000</sup> floors away.</p>
+    </div>
+    <div id="howDeepPane" hidden>
+      <p>All of it is one file, <a href="/babel.js" target="_blank" rel="noopener">/babel.js</a> (about 400 lines of plain JavaScript, no dependencies), which this page and the server both run. Each step below is a bijection, so the whole map from shelf to text is one too.</p>
+      <h3>1. Address to book number</h3>
+      <p>Floor and unit (metres along the gallery) are zig-zagged to naturals (0, −1, 1, −2, …), their base-29 digits interleaved, then <code>× 2 + side</code>, then <code>× 192 + shelf × 32 + slot</code>. That is a bijection from every address onto the naturals. Numbers from 29<sup>1,312,000</sup> up would be shelves past the end of the library, about 10<sup>959,000</sup> floors out.</p>
+      <h3>2. The scramble</h3>
+      <p>The numbers with exactly k base-29 digits are permuted among themselves: a shuffled table up to 3 digits, an 8-round Feistel network over the digits above that. Neighbouring shelves get unrelated numbers, and a short number stays short. Changing one digit changes 96.6% of the scrambled digits, which is exactly what random digits would do (28 in 29).</p>
+      <h3>3. Number to text, chained</h3>
+      <p>Page p is a keyed xoshiro128** stream; its key is a hash of the number's digits before page p. Each digit of the number is added to the next symbol (mod 29) and then absorbed into the stream's state, so everything after it depends on it. Backwards, each symbol's mask depends only on digits already recovered, so reading runs backwards exactly, one symbol at a time, with no guessing and no search.</p>
+      <h3>4. Search</h3>
+      <p><code>search(text)</code> writes the text at the top of page 1, lets everything after it fall as it would, and runs steps 3, 2 and 1 backwards. Every character before the text would cost a digit of the number, so the top of page 1 is the nearest place: an n-character text lands about 10<sup>0.73 n</sup> floors and metres out, about where its nearest copy would be in a random library.</p>
+      <h3>Why nothing is missing</h3>
+      <ul>
+        <li>Each step is invertible, and the code implements both directions; a composition of bijections is a bijection.</li>
+        <li>So every text of 1,312,000 symbols is the book at exactly one address, and every address within the library holds exactly one book.</li>
+        <li>The reader never sees your search: it rebuilds a book from its address alone. If search lied, the page would not say what it claims. You can check that below, or with the file itself.</li>
+        <li>It is not cryptographic: well mixed, but anyone with the file can compute anything. Nothing here is hidden; it is only vast.</li>
+      </ul>
+    </div>
+    <div class="proof">
+      <h3>Prove it</h3>
+      <p>Each of these runs here, in your browser, with the same code that draws the shelves.</p>
+      <div class="row"><button type="button" id="proveWalk">A book you could walk to</button></div>
+      <div class="out" id="proveWalkOut">Picks a random book near the spawn, reads its first line, searches for that line, and checks it leads back to that very book.</div>
+      <div class="row"><input id="proveText" maxlength="200" value="to be or not to be, that is the question." aria-label="Any text"><button type="button" id="proveAny">Find it</button></div>
+      <div class="out" id="proveAnyOut">Finds the shelf whose book opens with your text, then rebuilds that book from the address alone and shows you its first lines.</div>
+      <div class="row"><button type="button" id="proveBook">A whole book, both ways</button></div>
+      <div class="out" id="proveBookOut">Reads all 410 pages of a random book, then runs reading backwards over every page, to see whether the text leads back to the shelf it came from.</div>
+    </div>
+  </div>
+</div>
+
+<div id="map" hidden role="dialog" aria-label="Map">
+  <div class="mapcard">
+    <div class="head"><span id="mapTitle">Your wall</span><span class="zoom"><button type="button" id="mapOut" aria-label="Zoom out">−</button><button type="button" id="mapIn" aria-label="Zoom in">+</button></span><span id="mapNight"></span></div>
+    <canvas id="mapCv" width="720" height="420"></canvas>
+    <div class="head"><span>Rarest finds</span><span id="boardNote"></span></div>
+    <div class="tabs" id="boardTabs"></div>
+    <ol id="boardList"></ol>
+    <div class="head"><span>Everyone</span></div>
+    <ol id="mapList"></ol>
+    <div class="foot"><span id="mapFoot"></span><span><kbd>M</kbd> close</span></div>
+  </div>
+</div>
+
+<div id="touch">
+  <button id="tWalk" type="button">Walk</button>
+  <button id="tAuto" type="button">Auto</button>
+  <button id="tPrev" type="button" hidden>◀</button>
+  <button id="tNext" type="button" hidden>▶</button>
+  <button id="tOpen" type="button">Open book</button>
+</div>
+
+<div id="entry">
+  <div class="card">
+    <h1>A Short Stay in Hell</h1>
+    <p class="sub">The library from Steven L. Peck’s novel</p>
+    <p class="lede">Soren Johansson dies and learns that the true religion was Zoroastrianism. His Hell is a library. It holds every possible book, and one of them tells the story of his life. Find it, and he may leave.</p>
+    <p>Across the shaft is another gallery, with other shelves, other books and other people. On this side they are called savages. Over there, so are you.</p>
+    <p>Every book here is 410 pages of 40 lines, 80 characters to a line, in the letters a to z, the space, the comma and the period. Nearly all of them are noise. The shelves run left and right without end. The stairs lead to floors exactly like this one, and across the shaft the same gallery looks back at you.</p>
+    <p class="tool">Since we don’t have all day, you’ve been issued a GPU-powered phrase finder. As you walk, it reads every book around you and points out the rare ones with real words in them.<span class="online-only" hidden> The rarest finds go on the leaderboard, under the name of whoever found them first.</span></p>
+    <dl class="keys" id="keysDesktop">
+      <div><dt>Move</dt><dd><b>W A S D</b> walk · <b>Q</b> keep walking · <b>Shift</b> hurry · <b>Space</b> jump · <b>mouse</b> look</dd></div>
+      <div><dt>Read</dt><dd><b>E</b> open a book · <b>← →</b> turn pages · <b>G</b> next find<span class="online-only" hidden> · <b>O</b> leave a book standing open</span></dd></div>
+      <div><dt>See</dt><dd><b>L</b> words nearby<span class="online-only" hidden> · <b>M</b> map and leaderboard</span> · <b>?</b> keys and help · <b>I</b> how it works · <b>/</b> find where any text is written<span class="local-only" hidden> (and teleport there; <b>H</b> to come back)</span> · <b>Esc</b> free the mouse</dd></div>
+      <div><dt>Leave</dt><dd><b>F</b> climb over the railing, and steer as you fall</dd></div>
+    </dl>
+    <div class="keys" id="keysTouch" hidden>
+      <b>drag</b> to look · hold <b>Walk</b> to move, or tap <b>Auto</b> to keep walking · <b>Open book</b> when the dot brightens (facing the railing, it climbs over)
+    </div>
+    <label class="name" id="nameRow" hidden>Your name <input id="nameIn" maxlength="32" autocomplete="nickname"></label>
+    <button id="enter" type="button">Enter the library</button><button id="howOpen" type="button" class="how">How it works</button>
+    <p class="privacy">Others see the name you give and where you walk, and your finds go on the board under that name. No accounts, cookies, ads or trackers, and nothing loads from anywhere but here. Your browser keeps a random key so you come back as yourself; your network address only guards against floods, and we never store it.</p>
+  </div>
+</div>
+
+<script src="vendor/three-0.158.0.min.js" integrity="sha384-5UGTcMIxVUKFeJH0zOS3lqMAZNBG+fCXJbi3UglUq6ABO4MQJu6rxNa+MPP+qtwq"></script>
+<script type="module">
+// Book text comes from babel.js, which the server imports too, so both read the same books.
+import { pageText, search as findText, describeBig, describeWalk, bigToDecimal, bigFromDecimal, bigEqual, queryText, repeatedBook, SIDES, ALPHABET as LETTERS, PAGES, LINES, COLS, SHELVES, SLOTS } from './babel.js';
+import { createFinder } from './finder.js';
+import { proveWalk, proveAny, proveBook, nearbyAddress } from './proofs.js';
+import * as MapView from './mapview.js';
+import { rarity } from './scan.js';
+import * as Walk from './walk.js';
+import * as Book from './book.js';
+import * as Modes from './modes.js';
+import * as Proto from './protocol.js';
+import { createSession } from './session.js';
+import { createFrame } from './frame.js';
+import { EXTRAPOLATE_S } from './geometry.js';
+// The library's shape and movement come from geometry.js, which the server imports too (src/rules.ts), so where you
+// can walk here is where the server lets you be.
+import {
+  G, SHAFT as S, SEG, FLOOR_PITCH, UNIT_D, UNIT_H, SHELF_FACE, SHELF_PITCH, SHELF_BASE, SLOT0, BOOK_W, BOOK_H, shelfZ, slotY, bookAt,
+  STAIR_PERIOD, STAIR_OFF, STAIR_LEN, STAIR_RISE, HOLE0, STAIR_X0, STAIR_X1, STAIR_IN_SEG, segmentHasStair, acrossShaft,
+  EYE, BODY_R as R, REACH, clampWalkway,
+} from './geometry.js';
+(function () {
+  'use strict';
+  // ---------------------------------------------------------------- world (meters, Z up)
+  // One floor = a gallery of shelves along the back wall, a walkway, a railing, the shaft,
+  // and the same gallery facing you across it. Stairs every STAIR_PERIOD metres. Every floor identical.
+  // G, S, SEG, FLOOR_PITCH, the stairs, speeds, EYE and the body radius R are geometry.js's (world frame: wall at
+  // x = -G, railing at x = 0). Meshes are built wall-local, x measured from the wall: x_wall = x_world + G.
+  const CEIL_Z = 2.94, GLOW_Z = 2.92;
+  const GUARD0 = 1.8;   // flights stack directly above one another, so the opening spans the whole run
+  const SX0 = G + STAIR_X0, SX1 = G + STAIR_X1;   // the stair band, wall-local: along the railing, so the shelves never break
+  const RADIUS = 5, DETAIL_RADIUS = 1, GHOST = 16, NEAR_FLOORS = 6, FRAME_FLOORS = 1;   // the haze hides what lies past ±110 m; frames only near your floor
+  const el = id => document.getElementById(id);
+
+  // ---------------------------------------------------------------- renderer / scene
+  const canvas = el('view');
+  // No WebGL (switched off, blocked, or a very old device): say so on the entry card instead of an Enter that does nothing
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: devicePixelRatio < 2, powerPreference: 'high-performance' }); }
+  catch (err) {
+    el('enter').hidden = true; el('howOpen').hidden = true;
+    const p = document.createElement('p'); p.className = 'nogl';
+    p.textContent = 'This browser can’t draw the library: WebGL is switched off or not supported here. Try a recent Chrome, Safari, Firefox or Edge, with hardware acceleration on.';
+    el('enter').before(p);
+    throw err;
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+  renderer.setSize(innerWidth, innerHeight, false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  const scene = new THREE.Scene();
+  const HAZE = 0x1c150e;   // warm dust in the shaft: distant floors dissolve into it rather than into black
+  scene.background = new THREE.Color(HAZE);
+  scene.fog = new THREE.FogExp2(HAZE, 0.019);
+  const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 700);
+  camera.up.set(0, 0, 1);
+
+  // The architecture is lit in its shaders (libMat below). Scene lights only reach the figures and marks.
+  const hemi = new THREE.HemisphereLight(0xfff0d6, 0x2a1c10, 1.4); hemi.position.set(0, 0, 1); scene.add(hemi);
+
+  // ---------------------------------------------------------------- materials
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function hsv(h, s, v) {
+    const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+    const c = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
+    return c.map(x => Math.round(x * 255));
+  }
+  // Every book is bound alike: one oxblood cloth, two gilt bands at the same height, its number and place tooled in
+  // gold (the 'spine' label shader), shelved in perfect order, as if
+  // the night had just put every one of them back. Each shelf's shadow (under the board above, on the board below) is
+  // painted in rather than lit, so it costs nothing.
+  const BINDING = [86, 34, 28], GILT = '#b89a48';
+  function spineTexture() {
+    const W = 2048, H = 512, N = 32, cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), sw = W / N;
+    g.fillStyle = `rgb(${BINDING})`; g.fillRect(0, 0, W, H);
+    for (let s = 0; s < N; s++) {
+      const x = s * sw;
+      g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(x, 0, 2, H); g.fillRect(x + sw - 3, 0, 3, H);    // the gap between books
+      g.fillStyle = 'rgba(255,235,210,.08)'; g.fillRect(x + 4, 0, sw * 0.16, H);                  // the round of the spine
+      g.fillStyle = 'rgba(0,0,0,.14)'; g.fillRect(x + sw * 0.7, 0, sw * 0.3 - 3, H);
+      g.fillStyle = GILT; g.fillRect(x + 5, H - 76, sw - 10, 4); g.fillRect(x + 5, H - 384, sw - 10, 4);   // two bands: the gold tooling sits between and above them (spine shader)
+    }
+    let gr = g.createLinearGradient(0, 0, 0, H * 0.32);   // shadow under the shelf above
+    gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H * 0.32);
+    gr = g.createLinearGradient(0, H, 0, H * 0.9);       // and where the books stand on the board
+    gr.addColorStop(0, 'rgba(0,0,0,.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, H * 0.9, W, H * 0.1);
+    g.fillStyle = '#6e5b44'; g.fillRect(0, 0, W, Math.round(H * 0.03)); // page edges at the top, in shadow
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  // Distant shelves, one shelf per repeat: the same binding with soft gaps, and the board and its shadow drawn in, since
+  // shelf frames are only built close by.
+  function spineTextureFar() {
+    const W = 512, H = 128, N = 32, cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), sw = W / N;
+    g.fillStyle = `rgb(${BINDING})`; g.fillRect(0, 0, W, H);
+    for (let s = 0; s < N; s++) { const x = s * sw; g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(x + sw - 2, 0, 2, H); g.fillStyle = 'rgba(184,154,72,.35)'; g.fillRect(x + 2, H - 24, sw - 4, 2); g.fillRect(x + 2, H - 94, sw - 4, 2); }
+    let gr = g.createLinearGradient(0, 0, 0, H * 0.35);
+    gr.addColorStop(0, 'rgba(0,0,0,.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H * 0.35);
+    g.fillStyle = '#3a2314'; g.fillRect(0, H - 5, W, 5);   // the board each row stands on
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  // A railing seen from afar: the balusters as a cut-out picture on one panel, instead of fifteen boxes a metre
+  function balusterTexture() {
+    const W = 128, H = 128, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'); g.fillStyle = '#fff';
+    for (let i = 1; i < 7; i++) g.fillRect(i * W / 7 - 2, 0, 4, H);   // 6 balusters a metre
+    g.fillRect(0, H - 10, W, 10); g.fillRect(0, 0, 6, H);           // bottom rail and the post
+    const t = new THREE.CanvasTexture(cv); t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  }
+
+  // Digits for shelf labels: 0-9, minus, middle dot, white on clear, one 64×96 cell each. The label shaders
+  // below draw addresses with it from each fragment's world position, so no book needs its own texture.
+  function glyphTexture() {
+    const cw = 64, ch = 96, cv = document.createElement('canvas');
+    cv.width = cw * 12; cv.height = ch;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '700 84px Menlo, "DejaVu Sans Mono", Consolas, monospace';
+    '0123456789\u2212\u00b7'.split('').forEach((c, i) => g.fillText(c, i * cw + cw / 2, ch * 0.84));
+    const t = new THREE.CanvasTexture(cv);
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  }
+  const GLYPHS = glyphTexture();
+  // A find is addressed the way its label reads: unit·shelf·book, with a true minus sign.
+  const fmtUnit = u => (u < 0 ? '\u2212' : '') + Math.abs(u);
+  const short = (t, n) => t.length > n ? t.slice(0, n - 1).trimEnd() + '\u2026' : t;
+  // The two galleries face each other across the shaft (babel.js SIDES), each with its own books and its own people.
+  // Each side's view of the other, said from wherever you stand:
+  const SAVAGES = 'the savages across the shaft', cap = t => t[0].toUpperCase() + t.slice(1);
+  const sideName = s => SIDES[s === 1 ? 1 : 0];
+  const tagOf = a => `${fmtUnit(a.unit)}\u00b7${a.shelf + 1}\u00b7${a.slot + 1}`;
+
+  // Per-floor lighting from world position: each floor, near or far, is lit by the strip lamp under its own
+  // ceiling, brightest near it and falling off down the shelves and across the walkway. No scene lights, so
+  // 33 floors of lamps cost the same as one.
+  const LAMP_WL = 3.3, LAMP_H = 2.75;   // lamp line: metres out from the wall, height above the floor
+  const f1 = v => v.toFixed(3);
+  // Labels, drawn in the fragment shader on the near gallery's front faces (world +x):
+  //   'spine': a call-number sticker at the foot of every spine, unit·shelf small over the book number large;
+  //   'plaque': the unit number on a plaque above each unit's top shelf, big enough to read across the walkway.
+  const LABEL_GLSL = `
+    uniform sampler2D uGlyphs;
+    int putInt(inout int c[10], int n, int v) {   // append v's digits (and sign) to c from n; returns the new length
+      if (v < 0) { c[n] = 10; n++; v = -v; }
+      int d = 1; while (v / d >= 10) d *= 10;
+      for (; d > 0 && n < 10; d /= 10) { c[n] = (v / d) % 10; n++; }
+      return n;
+    }
+    // ink of a line of n glyphs centred at cx with its cell bottom at y0 and cell height gh (all metres in q)
+    float lineInk(int c[10], int n, vec2 q, float cx, float y0, float gh, vec2 dx, vec2 dy) {
+      float cw = gh * 0.62, x0 = cx - cw * float(n) * 0.5, i = floor((q.x - x0) / cw);
+      if (i < 0.0 || i >= float(n) || q.y < y0 || q.y > y0 + gh) return 0.0;
+      vec2 uv = vec2((float(c[int(i)]) + (q.x - x0 - i * cw) / cw) / 12.0, (q.y - y0) / gh), k = vec2(1.0 / (cw * 12.0), 1.0 / gh);
+      return textureGrad(uGlyphs, uv, dx * k, dy * k).a;
+    }
+  `;
+  const PAPER = 'vec3(0.86, 0.79, 0.62)', GOLD = 'vec3(0.47, 0.33, 0.08)', INK = 'vec3(0.024, 0.016, 0.009)';
+  const LABELS = {
+    // Gold tooling straight on the cloth, no label: the book's number across the top of the spine, and its unit and
+    // shelf running down the lower spine (turned a quarter, read top to bottom, as a spine title is). Book-local q: x
+    // across the spine (0-0.03 m, +x = the reader's right), y up it (0-0.30 m).
+    spine: `{
+      float h = mod(vLibW.z + 0.02, ${f1(FLOOR_PITCH)}) - 0.02, uy = floor(vLibW.y), ly = vLibW.y - uy - 0.02;
+      float sf = floor((h - ${f1(SHELF_BASE)}) / ${f1(SHELF_PITCH)}), sl = floor(ly / ${f1(BOOK_W)});
+      vec2 q = vec2(ly - sl * ${f1(BOOK_W)}, h - (sf * ${f1(SHELF_PITCH)} + ${f1(SHELF_BASE)})), dx = vec2(dFdx(vLibW.y), dFdx(h)), dy = vec2(dFdy(vLibW.y), dFdy(h));
+      if (vLibN.x > 0.9 && sf >= 0.0 && sf < 6.0 && sl >= 0.0 && sl < 32.0 && q.x > 0.003 && q.x < 0.027 && q.y > 0.06 && q.y < 0.28) {
+        int b[10]; int m = putInt(b, 0, int(sl) + 1);
+        float ink = lineInk(b, m, q, 0.015, 0.236, min(0.019, 0.022 / (float(m) * 0.62)), dx, dy);   // the number, above the upper band
+        int a[10]; int n = putInt(a, 0, int(uy)); a[n] = 11; n = putInt(a, n + 1, int(sf) + 1);
+        // unit·shelf, turned: reading runs down the spine from 0.17 m to 0.065 m, letters' tops to the reader's right
+        vec2 r = vec2(0.17 - q.y, q.x), rdx = vec2(-dx.y, dx.x), rdy = vec2(-dy.y, dy.x);
+        ink = max(ink, lineInk(a, n, r, 0.0525, 0.006, min(0.018, 0.1 / (float(n) * 0.62)), rdx, rdy));
+        // fading into the cloth with distance, so far shelves don't glitter
+        float far = smoothstep(3.0, 9.0, length(vLibW - cameraPosition));
+        diffuseColor.rgb = mix(diffuseColor.rgb, ${GOLD}, ink * (1.0 - far));
+      }
+    }`,
+    plaque: `{
+      float h = mod(vLibW.z + 0.02, ${f1(FLOOR_PITCH)}) - 0.02, fy = vLibW.y - floor(vLibW.y);
+      vec2 dx = vec2(dFdx(vLibW.y), dFdx(h)), dy = vec2(dFdy(vLibW.y), dFdy(h));
+      if (vLibN.x > 0.9 && vLibW.x > ${f1(-G + UNIT_D - 0.002)} && h > 2.245 && h < 2.365 && fy > 0.3 && fy < 0.7) {
+        int a[10]; int n = putInt(a, 0, int(floor(vLibW.y)));
+        float ink = lineInk(a, n, vec2(fy, h), 0.5, 2.25, min(0.125, 0.37 / (float(n) * 0.62)), dx, dy);
+        diffuseColor.rgb = mix(${PAPER}, ${INK}, ink);
+      }
+    }`,
+  };
+  function libMat(params, gain = 1, label = null) {   // gain scales the lamp term (the ceiling sits right beside the lamp)
+    const m = new THREE.MeshBasicMaterial(params);
+    m.onBeforeCompile = sh => {
+      if (label) sh.uniforms.uGlyphs = { value: GLYPHS };
+      sh.vertexShader = 'varying vec3 vLibW;\nvarying vec3 vLibN;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+        vec4 libP = vec4(transformed, 1.0); vec3 libN = normal;
+        #ifdef USE_INSTANCING
+          libP = instanceMatrix * libP; libN = mat3(instanceMatrix) * libN;
+        #endif
+        vLibW = (modelMatrix * libP).xyz; vLibN = normalize(mat3(modelMatrix) * libN);`);
+      sh.fragmentShader = `varying vec3 vLibW;
+        varying vec3 vLibN;
+        vec3 libLight(vec3 w, vec3 n) {
+          float h = mod(w.z + 0.02, ${f1(FLOOR_PITCH)}) - 0.02;          // height above this floor's walkway
+          float lampX = w.x > ${f1(S / 2)} ? ${f1(S + G - LAMP_WL)} : ${f1(-G + LAMP_WL)};
+          vec3 L = vec3(lampX - w.x, 0.0, ${f1(LAMP_H)} - h);
+          float lam = max(dot(n, normalize(L)), 0.0) * 0.75 + 0.25;
+          float att = 1.0 / (1.0 + 0.12 * dot(L, L));
+          float shaft = max(dot(n, vec3(w.x > ${f1(S / 2)} ? -1.0 : 1.0, 0.0, 0.0)), 0.0) * 0.22;   // glow from across the shaft
+          return vec3(0.10, 0.085, 0.07) + vec3(1.0, 0.85, 0.65) * shaft + vec3(2.3, 2.0, 1.6) * ${f1(gain)} * att * lam;
+        }
+        ${label ? LABEL_GLSL : ''}
+        ` + sh.fragmentShader.replace('#include <opaque_fragment>', `${label ? LABELS[label] : ''}
+        outgoingLight = diffuseColor.rgb * libLight(vLibW, normalize(vLibN));
+        #include <opaque_fragment>`);
+    };
+    m.customProgramCacheKey = () => 'libLight' + gain + (label || '');
+    return m;
+  }
+  const matWood = libMat({ color: 0x4a2c17 });
+  const matSpines = libMat({ map: spineTexture() }, 1, 'spine');
+  const matWoodNear = libMat({ color: 0x4a2c17 }, 1, 'plaque');
+  const matSpinesFar = libMat({ map: spineTextureFar() });
+  const matFloor = libMat({ color: 0xb49a7c, map: floorTexture() });
+  const matTrim = libMat({ color: 0x5e3f28 });
+  const matCeil = libMat({ color: 0x6b5d49 }, 0.55);
+  const matWall = libMat({ color: 0x2b1f16 });
+  const matRail = libMat({ color: 0x3b2412 });
+  const matRailPanel = libMat({ color: 0x3b2412, alphaMap: balusterTexture(), alphaTest: 0.5 });
+  // painted shadows where floor and ceiling meet the wall: black, fading out across the walkway
+  function shadowTexture() {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 4;
+    const g = cv.getContext('2d'), gr = g.createLinearGradient(0, 0, 64, 0);
+    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.35, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 4);
+    return new THREE.CanvasTexture(cv);
+  }
+  const matShadow = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, alphaMap: shadowTexture(), depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const matGlow = new THREE.MeshBasicMaterial({ color: 0xf2d9ab });
+  const matHalo = new THREE.MeshBasicMaterial({ map: haloTexture(), color: 0xffcf8a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const matVoid = new THREE.MeshBasicMaterial({ color: HAZE });
+  function floorTexture() {   // 8 planks of 0.2 m across 1.6 m, joints staggered along 2.4 m
+    const W = 256, H = 384, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), rnd = mulberry32(31), pw = W / 8;
+    for (let i = 0; i < 8; i++) {
+      const cut = rnd() * H, x = i * pw;
+      for (const [y0, y1] of [[0, cut], [cut, H]]) {
+        const v = 0.2 + rnd() * 0.07;
+        g.fillStyle = `rgb(${Math.round(255 * v * 1.25)},${Math.round(255 * v)},${Math.round(255 * v * 0.78)})`; g.fillRect(x, y0, pw, y1 - y0);
+        g.fillStyle = 'rgba(255,230,190,.035)'; for (let k = 0; k < 6; k++) g.fillRect(x + rnd() * pw, y0, 1, y1 - y0);   // grain
+      }
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(x, 0, 1.5, H); g.fillRect(x, cut, pw, 1.5);
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  function haloTexture() {   // soft falloff across the strip; the strip itself sits in the bright middle
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 4;
+    const g = cv.getContext('2d'), gr = g.createLinearGradient(0, 0, 128, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,.16)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 4);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+
+  // ---------------------------------------------------------------- geometry builder (controlled UVs)
+  function GB() { this.p = []; this.n = []; this.uv = []; this.idx = []; }
+  GB.prototype.quad = function (pts, nrm, uvs) {
+    const b = this.p.length / 3;
+    for (let i = 0; i < 4; i++) { this.p.push(...pts[i]); this.n.push(...nrm); this.uv.push(...uvs[i]); }
+    this.idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  };
+  const STRIP = [[0.5, 0.985], [0.5, 0.985], [0.5, 0.985], [0.5, 0.985]];
+  // uv: 'wood' everywhere neutral; 'spine' spines on +X face; 'spineRep' spines repeated vertically (far LOD)
+  GB.prototype.box = function (x0, x1, y0, y1, z0, z1, mode, reps) {
+    const top = mode === 'spineRep' ? 0.965 * (reps || 6) : 0.965;
+    const spine = [[0, 0], [1, 0], [1, top], [0, top]];
+    const uvX = (mode === 'spine' || mode === 'spineRep') ? spine : STRIP;
+    this.quad([[x0, y1, z0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1]], [-1, 0, 0], STRIP);
+    this.quad([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], [1, 0, 0], uvX);
+    this.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, -1, 0], STRIP);
+    this.quad([[x1, y1, z0], [x0, y1, z0], [x0, y1, z1], [x1, y1, z1]], [0, 1, 0], STRIP);
+    this.quad([[x0, y1, z0], [x1, y1, z0], [x1, y0, z0], [x0, y0, z0]], [0, 0, -1], STRIP);
+    const uvTop = mode === 'floor' ? [[x0 / 1.6, y0 / 2.4], [x1 / 1.6, y0 / 2.4], [x1 / 1.6, y1 / 2.4], [x0 / 1.6, y1 / 2.4]] : STRIP;
+    this.quad([[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], [0, 0, 1], uvTop);
+  };
+  GB.prototype.build = function () {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(this.n, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
+    g.setIndex(this.idx);
+    return g;
+  };
+
+  // All "wall-local" geometry: the wall is the plane x = 0, the gallery extends toward +x (the shaft side), y runs along the gallery.
+  // Shelf unit: x in [0, 0.3], y in [0, 1], z in [0, 2.4]; single-sided, spines toward +x.
+  function unitGeometry(detail) {
+    const wood = new GB(), books = new GB(), T = 0.02;
+    if (detail) {
+      wood.box(0, T, 0, 1, 0, 2.4, 'wood');
+      wood.box(0, UNIT_D, 0, T, 0, 2.4, 'wood'); wood.box(0, UNIT_D, 1 - T, 1, 0, 2.4, 'wood');
+      for (let i = 0; i < 7; i++) { const z = i < 6 ? i * SHELF_PITCH : UNIT_H - T; wood.box(0, UNIT_D, T, 1 - T, z, z + T, 'wood'); }
+      for (let i = 0; i < 6; i++) { const z = shelfZ(i); books.box(0.04, UNIT_D - 0.01, 0.02, 0.98, z, z + BOOK_H, 'spine'); }
+      wood.box(UNIT_D - 0.012, UNIT_D, 0.3, 0.7, 2.245, 2.365, 'wood');   // the unit's number plaque, lettered by the 'plaque' shader
+    } else {
+      wood.box(0, UNIT_D, 0, 1, 2.3, 2.4, 'wood');
+      wood.box(0, UNIT_D, 0, T, 0, 2.4, 'wood'); wood.box(0, UNIT_D, 1 - T, 1, 0, 2.4, 'wood');
+      const x = UNIT_D - 0.01, top = 0.965 * 6;   // only the front and the top of a distant row can be seen: 4 triangles, not 12
+      books.quad([[x, 0.02, 0.02], [x, 0.98, 0.02], [x, 0.98, 2.3], [x, 0.02, 2.3]], [1, 0, 0], [[0, 0], [1, 0], [1, top], [0, top]]);
+      books.quad([[0.04, 0.02, 2.3], [x, 0.02, 2.3], [x, 0.98, 2.3], [0.04, 0.98, 2.3]], [0, 0, 1], STRIP);
+    }
+    return { wood: wood.build(), books: books.build() };
+  }
+  const GEO_DETAIL = unitGeometry(true), GEO_FAR = unitGeometry(false);
+
+  // walkway slab for one segment: x in [0, G], y in [0, SEG], z in [-0.2, 0]; optional stair hole
+  function slabGeometry(hole) {
+    const b = new GB();
+    if (!hole) b.box(0, G, 0, SEG, -0.2, 0, 'floor');
+    else {
+      const y0 = STAIR_IN_SEG + HOLE0, y1 = STAIR_IN_SEG + STAIR_LEN;
+      b.box(0, SX0, 0, SEG, -0.2, 0, 'floor');
+      b.box(SX0, SX1, 0, y0, -0.2, 0, 'floor'); b.box(SX0, SX1, y1, SEG, -0.2, 0, 'floor');
+      b.box(SX1, G, 0, SEG, -0.2, 0, 'floor');
+    }
+    return b.build();
+  }
+  const SLAB_PLAIN = slabGeometry(false), SLAB_HOLE = slabGeometry(true);
+  // ceiling over the walkway (dim, lit) with a narrow light strip along the middle, both facing down
+  // ceiling over the walkway; in stair segments it has the opening the stair climbs through, lined up to the slab above
+  function ceilGeometry(hole) {
+    const b = new GB(), q = (x0, x1, y0, y1) => b.quad([[x0, y1, CEIL_Z], [x1, y1, CEIL_Z], [x1, y0, CEIL_Z], [x0, y0, CEIL_Z]], [0, 0, -1], STRIP);
+    if (!hole) { q(0, G, 0, SEG); return b.build(); }
+    const y0 = STAIR_IN_SEG + HOLE0, y1 = STAIR_IN_SEG + STAIR_LEN, zt = FLOOR_PITCH - 0.2;
+    q(0, SX0, 0, SEG); q(SX0, SX1, 0, y0); q(SX0, SX1, y1, SEG); q(SX1, G, 0, SEG);
+    // the well between ceiling and slab, facing into the opening
+    b.quad([[SX0, y0, CEIL_Z], [SX1, y0, CEIL_Z], [SX1, y0, zt], [SX0, y0, zt]], [0, 1, 0], STRIP);
+    b.quad([[SX1, y1, CEIL_Z], [SX0, y1, CEIL_Z], [SX0, y1, zt], [SX1, y1, zt]], [0, -1, 0], STRIP);
+    b.quad([[SX0, y1, CEIL_Z], [SX0, y0, CEIL_Z], [SX0, y0, zt], [SX0, y1, zt]], [1, 0, 0], STRIP);
+    b.quad([[SX1, y0, CEIL_Z], [SX1, y1, CEIL_Z], [SX1, y1, zt], [SX1, y0, zt]], [-1, 0, 0], STRIP);
+    return b.build();
+  }
+  const CEIL_PLAIN = ceilGeometry(false), CEIL_HOLE = ceilGeometry(true);
+  // lighter trim on the shaft edge of every floor: a fascia on the slab and a cornice under the ceiling,
+  // so from across the shaft each floor reads as two lit lines instead of a black band
+  const TRIM_GEO = (() => { const b = new GB(); b.box(G - 0.02, G + 0.06, 0, SEG, -0.34, 0.05, 'wood'); b.box(G - 0.14, G + 0.03, 0, SEG, CEIL_Z - 0.1, FLOOR_PITCH - 0.2, 'wood'); return b.build(); })();
+  const HALO_GEO = (() => { const b = new GB(), x0 = 1.6, x1 = SX0 - 0.1, z = GLOW_Z - 0.01; b.quad([[x0, SEG, z], [x1, SEG, z], [x1, 0, z], [x0, 0, z]], [0, 0, -1], [[0, .5], [1, .5], [1, .5], [0, .5]]); return b.build(); })();
+  const GLOW_GEO = (() => { const b = new GB(); const x0 = 3.05, x1 = 3.55; b.quad([[x0, SEG, GLOW_Z], [x1, SEG, GLOW_Z], [x1, 0, GLOW_Z], [x0, 0, GLOW_Z]], [0, 0, -1], STRIP); return b.build(); })();
+  // railing: 1 m run along +y, posts and two rails, at x in [0, 0.05]
+  // near floors get a balustrade: newel post, handrail, bottom rail, turned-looking balusters
+  const RAIL_DETAIL_GEO = (() => {
+    const b = new GB();
+    b.box(-0.02, 0.07, 0, 0.08, 0, 1.14, 'wood');
+    b.box(-0.03, 0.08, 0, 1, 1.04, 1.1, 'wood'); b.box(0, 0.05, 0, 1, 0.06, 0.12, 'wood');
+    for (let i = 1; i < 7; i++) { const y = i / 7; b.box(0.012, 0.038, y - 0.013, y + 0.013, 0.12, 1.04, 'wood'); b.box(0.004, 0.046, y - 0.021, y + 0.021, 0.5, 0.58, 'wood'); }
+    return b.build();
+  })();
+  const RAIL_GEO = (() => { const b = new GB(); b.box(0, 0.05, 0, 0.05, 0, 1.1, 'wood'); b.box(0, 0.05, 0.95, 1, 0, 1.1, 'wood'); b.box(0, 0.05, 0, 1, 1.05, 1.1, 'wood'); b.box(0, 0.05, 0, 1, 0.55, 0.6, 'wood'); return b.build(); })();
+  // a distant metre of railing: handrail, and the balustrade as one cut-out panel each way (16 triangles, not 180)
+  const RAIL_FAR_GEO = (() => { const b = new GB(); b.box(-0.03, 0.08, 0, 1, 1.04, 1.1, 'wood'); return b.build(); })();
+  const RAIL_PANEL_GEO = (() => {
+    const b = new GB(), uv = [[0, 0], [1, 0], [1, 1], [0, 1]], x = 0.025;
+    b.quad([[x, 0, 0.06], [x, 1, 0.06], [x, 1, 1.04], [x, 0, 1.04]], [1, 0, 0], uv);
+    b.quad([[x, 1, 0.06], [x, 0, 0.06], [x, 0, 1.04], [x, 1, 1.04]], [-1, 0, 0], [[1, 0], [0, 0], [0, 1], [1, 1]]);
+    return b.build();
+  })();
+  // shadows where the walkway meets the shelves and where the ceiling meets the wall, one quad each per floor
+  const SHADOW_FLOOR_GEO = (() => { const b = new GB(); b.quad([[UNIT_D, 0, 0.004], [UNIT_D + 0.9, 0, 0.004], [UNIT_D + 0.9, SEG, 0.004], [UNIT_D, SEG, 0.004]], [0, 0, 1], [[0, .5], [1, .5], [1, .5], [0, .5]]); return b.build(); })();
+  const SHADOW_CEIL_GEO = (() => { const b = new GB(), z = CEIL_Z - 0.004; b.quad([[0, SEG, z], [1.2, SEG, z], [1.2, 0, z], [0, 0, z]], [0, 0, -1], [[0, .5], [1, .5], [1, .5], [0, .5]]); return b.build(); })();
+  // stair: rises toward +y from (y=0, z=0) to (y=STAIR_LEN, z=STAIR_RISE); x in [SX0, SX1], along the railing
+  const STAIR_GEO = (() => {
+    // open treads and risers on a sloped stringer: nothing solid underneath, so the flight above clears your head
+    const b = new GB(), n = 16, run = STAIR_LEN / n, rise = STAIR_RISE / n, T = 0.22;
+    for (let i = 0; i < n; i++) {
+      b.box(SX0, SX1, i * run, (i + 1) * run + 0.02, (i + 1) * rise - 0.05, (i + 1) * rise, 'wood');
+      b.box(SX0, SX1, i * run, i * run + 0.025, i * rise, (i + 1) * rise - 0.05, 'wood');
+    }
+    const L = STAIR_LEN, H = STAIR_RISE, ns = Math.hypot(L, H), sn = [0, H / ns, -L / ns];
+    for (const x of [SX0 + 0.06, SX1]) {   // stringers, both faces
+      b.quad([[x, 0, -T], [x, L, H - T], [x, L, H], [x, 0, 0]], [1, 0, 0], STRIP);
+      b.quad([[x - 0.06, L, H - T], [x - 0.06, 0, -T], [x - 0.06, 0, 0], [x - 0.06, L, H]], [-1, 0, 0], STRIP);
+    }
+    b.quad([[SX0, L, H - T], [SX1, L, H - T], [SX1, 0, -T], [SX0, 0, -T]], sn, STRIP);   // soffit
+    return b.build();
+  })();
+  // a distant stair: stringers, the sloped run and its soffit; the treads are too small to see from there
+  const STAIR_FAR_GEO = (() => {
+    const b = new GB(), L = STAIR_LEN, H = STAIR_RISE, T = 0.22, ns = Math.hypot(L, H), up = [0, -H / ns, L / ns], sn = [0, H / ns, -L / ns];
+    b.quad([[SX0, 0, 0], [SX1, 0, 0], [SX1, L, H], [SX0, L, H]], up, STRIP);
+    b.quad([[SX0, L, H - T], [SX1, L, H - T], [SX1, 0, -T], [SX0, 0, -T]], sn, STRIP);
+    for (const x of [SX0, SX1]) b.quad([[x, 0, -T], [x, L, H - T], [x, L, H], [x, 0, 0]], [x === SX0 ? -1 : 1, 0, 0], STRIP);
+    return b.build();
+  })();
+  const WALL_GEO = (() => { const H = (GHOST + 1) * FLOOR_PITCH; const b = new GB(); b.quad([[0, 0, -H], [0, SEG, -H], [0, SEG, H], [0, 0, H]], [1, 0, 0], STRIP); return b.build(); })();
+
+  // ---------------------------------------------------------------- segments (streamed along y), both galleries, all ghost floors
+  const segments = new Map();
+  const M = new THREE.Matrix4(), M2 = new THREE.Matrix4(), M3 = new THREE.Matrix4(), col = new THREE.Color();
+  const Q_FLIP = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI));
+  const V1 = new THREE.Vector3(1, 1, 1);
+  const SLOPE = Math.atan2(STAIR_RISE, STAIR_LEN);
+  const Q_SLOPE = new THREE.Quaternion().setFromEuler(new THREE.Euler(SLOPE, 0, 0));
+  const RAIL_STEP = 0.96, RAIL_DY = RAIL_STEP * Math.cos(SLOPE), RAIL_DZ = RAIL_STEP * Math.sin(SLOPE);
+  const hasStair = segmentHasStair;   // which segments hold a flight, and where in them (STAIR_IN_SEG): geometry.js says
+  // side transform: near gallery wall at x=-G (identity), far gallery rotated 180° so its shelves face the shaft
+  function sideMatrix(side, j, z, out) {
+    return side === 0 ? out.compose(new THREE.Vector3(-G, j * SEG, z), new THREE.Quaternion(), V1)
+                      : out.compose(new THREE.Vector3(S + G, j * SEG + SEG, z), Q_FLIP, V1);
+  }
+  function buildSegment(j, detail) {
+    const grp = new THREE.Group();
+    const floors = GHOST * 2 + 1, stair = hasStair(j);
+    const unitsPerSide = SEG;   // the stairs run along the railing: every metre of wall has its shelves
+    const nearFloors = NEAR_FLOORS * 2 + 1;
+    const nFar = floors * 2 * unitsPerSide - (detail ? unitsPerSide : 0);
+    const woodFar = new THREE.InstancedMesh(GEO_FAR.wood, matWood, (FRAME_FLOORS * 2 + 1) * 2 * unitsPerSide);
+    const booksFar = new THREE.InstancedMesh(GEO_FAR.books, matSpinesFar, nFar);
+    const woodDet = detail ? new THREE.InstancedMesh(GEO_DETAIL.wood, matWoodNear, unitsPerSide) : null;
+    const booksDet = detail ? new THREE.InstancedMesh(GEO_DETAIL.books, matSpines, unitsPerSide) : null;
+    const slabs = new THREE.InstancedMesh(stair ? SLAB_HOLE : SLAB_PLAIN, matFloor, floors * 2);
+    const ceils = new THREE.InstancedMesh(stair ? CEIL_HOLE : CEIL_PLAIN, matCeil, floors * 2);
+    const trims = new THREE.InstancedMesh(TRIM_GEO, matTrim, floors * 2);
+    const railsDet = detail ? new THREE.InstancedMesh(RAIL_DETAIL_GEO, matRail, 3 * SEG) : null;   // balusters: your floor and the next ones, close by
+    const shadowsF = new THREE.InstancedMesh(SHADOW_FLOOR_GEO, matShadow, floors * 2), shadowsC = new THREE.InstancedMesh(SHADOW_CEIL_GEO, matShadow, floors * 2);
+    const glows = new THREE.InstancedMesh(GLOW_GEO, matGlow, floors * 2);
+    const halos = new THREE.InstancedMesh(HALO_GEO, matHalo, floors * 2);
+    const rails = new THREE.InstancedMesh(RAIL_GEO, matRail, (stair ? 9 : 0) * nearFloors * 2);   // the stair's own rails
+    const railsFar = new THREE.InstancedMesh(RAIL_FAR_GEO, matRail, nearFloors * 2 * SEG), panels = new THREE.InstancedMesh(RAIL_PANEL_GEO, matRailPanel, nearFloors * 2 * SEG);
+    const stairs = stair ? new THREE.InstancedMesh(STAIR_GEO, matWood, 3 * 2) : null, stairsFar = stair ? new THREE.InstancedMesh(STAIR_FAR_GEO, matWood, nearFloors * 2) : null;
+    let iFar = 0, iWood = 0, iDet = 0, iSlab = 0, iRail = 0, iStair = 0, iStairFar = 0, iRailDet = 0, iRailFar = 0;
+    for (let k = -GHOST; k <= GHOST; k++) {
+      const z = k * FLOOR_PITCH;
+      const near = Math.abs(k) <= NEAR_FLOORS;   // railings, stairs and shelf frames only on floors close enough to see them
+      for (let side = 0; side < 2; side++) {
+        sideMatrix(side, j, z, M);
+        slabs.setMatrixAt(iSlab, M); ceils.setMatrixAt(iSlab, M); trims.setMatrixAt(iSlab, M); glows.setMatrixAt(iSlab, M); halos.setMatrixAt(iSlab, M);
+        shadowsF.setMatrixAt(iSlab, M); shadowsC.setMatrixAt(iSlab, M);
+        if (stairs && near) {   // full treads on your floor and the next; a plain run farther off
+          M2.multiplyMatrices(M, M3.makeTranslation(0, STAIR_IN_SEG, 0));
+          if (Math.abs(k) <= 1) stairs.setMatrixAt(iStair++, M2); else stairsFar.setMatrixAt(iStairFar++, M2);
+        }
+        iSlab++;
+        const useDetail = detail && k === 0 && side === 0;
+        for (let u = 0; u < SEG; u++) {
+          M2.multiplyMatrices(M, M3.makeTranslation(0, u, 0));
+          if (useDetail) { woodDet.setMatrixAt(iDet, M2); booksDet.setMatrixAt(iDet, M2); iDet++; }   // every book bound alike: no tint
+          else { if (Math.abs(k) <= FRAME_FLOORS) woodFar.setMatrixAt(iWood++, M2); booksFar.setMatrixAt(iFar, M2); iFar++; }
+        }
+        if (!near) continue;
+        for (let s = 0; s < SEG; s++) {
+          M2.multiplyMatrices(M, M3.makeTranslation(G - 0.05, s, 0));
+          if (railsDet && side === 0 && Math.abs(k) <= 1) railsDet.setMatrixAt(iRailDet++, M2);
+          else { railsFar.setMatrixAt(iRailFar, M2); panels.setMatrixAt(iRailFar++, M2); }
+        }
+        if (stair) {
+          for (let i = 0; i < 6; i++) {   // sloped rail on the walkway side of the stair (the railing guards its other side)
+            M3.compose(new THREE.Vector3(SX0 - 0.05, STAIR_IN_SEG + i * RAIL_DY, i * RAIL_DZ), Q_SLOPE, new THREE.Vector3(1, RAIL_STEP, 1));
+            rails.setMatrixAt(iRail++, M2.multiplyMatrices(M, M3));
+          }
+          for (let i = 0; i < 3; i++) rails.setMatrixAt(iRail++, M2.multiplyMatrices(M, M3.makeTranslation(SX0 - 0.05, STAIR_IN_SEG + GUARD0 + i, 0)));  // guard rail where the opening becomes a real drop
+        }
+      }
+    }
+    rails.count = iRail; if (railsDet) railsDet.count = iRailDet; railsFar.count = panels.count = iRailFar; woodFar.count = iWood;
+    if (stairs) { stairs.count = iStair; stairsFar.count = iStairFar; }
+    for (const m of [woodFar, booksFar, woodDet, booksDet, slabs, ceils, trims, glows, halos, rails, railsDet, railsFar, panels, stairs, stairsFar, shadowsF, shadowsC]) {
+      if (!m) continue;
+      m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true;
+      grp.add(m);
+    }
+    // back walls behind the shelves, both sides, full ghost height
+    const wallA = new THREE.Mesh(WALL_GEO, matWall); wallA.position.set(-G - 0.01, j * SEG, 0); grp.add(wallA);
+    const wallB = new THREE.Mesh(WALL_GEO, matWall); wallB.position.set(S + G + 0.01, j * SEG + SEG, 0); wallB.rotation.z = Math.PI; grp.add(wallB);
+    grp.userData = { j, detail };
+    scene.add(grp);
+    return grp;
+  }
+  function disposeSegment(g) { g.traverse(o => { if (o.isInstancedMesh) o.dispose(); }); scene.remove(g); }
+  let curJ = 1e9;
+  function updateSegments(py, force) {
+    const j = Math.floor(py / SEG);
+    if (!force && j === curJ) return;
+    curJ = j;
+    for (const [key, g] of segments) {
+      const d = Math.abs(g.userData.j - j), wantDetail = d <= DETAIL_RADIUS;
+      if (d > RADIUS || wantDetail !== g.userData.detail) { disposeSegment(g); segments.delete(key); }
+    }
+    for (let d = -RADIUS; d <= RADIUS; d++) if (!segments.has(j + d)) {
+      const t0 = STATS ? performance.now() : 0;
+      segments.set(j + d, buildSegment(j + d, Math.abs(d) <= DETAIL_RADIUS));
+      if (STATS) STATS.buildMs.push(+(performance.now() - t0).toFixed(1));
+    }
+  }
+  // Dust: a few hundred motes drifting in the walkway around you, brightest under the lamp line. They live in a box
+  // that follows you (wrapping round it), on your own floor; points, so they cost next to nothing.
+  const DUST = (() => {
+    const N = 350, BOX = 24, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), drift = new Float32Array(N * 3), rnd = mulberry32(99);
+    const lampX = -G + LAMP_WL;
+    for (let i = 0; i < N; i++) {
+      pos[3 * i] = -G + UNIT_D + 0.2 + rnd() * (G - UNIT_D - 0.4); pos[3 * i + 1] = (rnd() - 0.5) * BOX; pos[3 * i + 2] = 0.3 + rnd() * 2.5;
+      const near = Math.exp(-((pos[3 * i] - lampX) ** 2) / 3) * (0.4 + 0.6 * pos[3 * i + 2] / 2.8), v = 0.25 + 0.75 * near * (0.5 + rnd() * 0.5);
+      col[3 * i] = v; col[3 * i + 1] = v * 0.86; col[3 * i + 2] = v * 0.66;
+      drift[3 * i] = (rnd() - 0.5) * 0.03; drift[3 * i + 1] = (rnd() - 0.5) * 0.05; drift[3 * i + 2] = (rnd() - 0.5) * 0.02;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const g = cv.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+    const mat = new THREE.PointsMaterial({ size: 0.014, map: new THREE.CanvasTexture(cv), vertexColors: true, transparent: true, opacity: 0.55,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts);
+    let t = 0;
+    return dt => {   // drift, sway a little, and wrap around wherever you are
+      t += dt; const y0 = P.y - BOX / 2;
+      for (let i = 0; i < N; i++) {
+        const k = 3 * i;
+        pos[k] += (drift[k] + 0.004 * Math.sin(t * 0.3 + i)) * dt; pos[k + 1] += drift[k + 1] * dt; pos[k + 2] += (drift[k + 2] + 0.003 * Math.cos(t * 0.21 + i * 1.7)) * dt;
+        pos[k + 1] = y0 + ((((pos[k + 1] - y0) % BOX) + BOX) % BOX);
+        if (pos[k + 2] < 0.2) pos[k + 2] = 2.8; else if (pos[k + 2] > 2.85) pos[k + 2] = 0.25;
+      }
+      geo.attributes.position.needsUpdate = true;
+    };
+  })();
+  // void caps far above and below the ghost floors, so the shaft ends in darkness rather than a hard edge
+  for (const zc of [(GHOST + 1) * FLOOR_PITCH, -(GHOST + 1) * FLOOR_PITCH]) {
+    const cap = new THREE.Mesh(new THREE.PlaneGeometry(S + 2 * G + 4, 4000), matVoid); cap.position.set(S / 2, 0, zc); scene.add(cap);
+  }
+  const capFollow = scene.children.slice(-2);
+
+  // ---------------------------------------------------------------- player
+  const P = { x: -3.2, y: 4, z: 0, yaw: Math.PI / 2, pitch: 0, vz: 0, vx: 0, vy: 0, grounded: true, floor: 0, side: 0, fallen: 0, dist: 0, crossed: false };   // crossed: mid-fall, already crossed the shaft this fall (once a fall)
+  // Home or away (frame.js): after a teleport the world is the same but the addresses are shifted (refFrame.real maps
+  // a local address to the real one), and the world hears nothing until you come back. Every way in or out goes
+  // through it; the page listens (refFrame.on, by leftHome) and places the player and refreshes what it shows.
+  const refFrame = createFrame();
+  const keys = new Set();
+  let reading = false, locked = false, touchWalk = false, autoWalk = false, book = null;
+  const isTouch = matchMedia('(pointer: coarse)').matches && 'ontouchstart' in window;
+  // Where you can stand and walk (groundAt, resolve) is geometry.js's, the same rules the server checks against.
+  // The far gallery is this gallery turned half a turn about the middle of the shaft (see sideMatrix), so past the
+  // midpoint walk.js carries the player into the near frame (acrossShaft). The view is unchanged; the far railing becomes the near one.
+  // How the body moves (walking, gravity, stairs, floors, crossing the shaft, the railing) is walk.js's, a pure step the
+  // check script drives against the server's judgeMove; here we only turn input into an intent and events into the page.
+  const has = (...codes) => codes.some(c => keys.has(c));
+  const intent = () => ({
+    forward: (has('KeyW', 'ArrowUp') || touchWalk || autoWalk ? 1 : 0) - (has('KeyS', 'ArrowDown') ? 1 : 0),
+    strafe: (has('KeyD', 'ArrowRight') ? 1 : 0) - (has('KeyA', 'ArrowLeft') ? 1 : 0),
+    run: has('ShiftLeft', 'ShiftRight'), jump: has('Space'), still: reading,
+  });
+  function apply(r) {
+    Object.assign(P, r.body);
+    for (const e of r.events) if (e.type === 'crossed') {   // the other gallery: its own books, its own marks, its own people
+      marksFloor = null;
+      notice(`You have fallen across the shaft, to the ${sideName(P.side)} side. These are its shelves now. Its people think the ${sideName(P.side ^ 1)} side are savages, as you did.`, 9000);
+    }
+  }
+  const canClimb = () => !reading && Walk.canClimb(P);   // not from the stairs, not with a book in hand
+  function climb() { if (canClimb()) apply(Walk.climbOver(P)); }
+
+  function step(dt) {
+    apply(Walk.walk(P, intent(), dt));
+    updateSegments(P.y, false);
+  }
+
+  // ---------------------------------------------------------------- books
+  function lookTarget() {
+    if (P.x > 0) return null;
+    const cp = Math.cos(P.pitch), dx = cp * Math.cos(P.yaw), dy = cp * Math.sin(P.yaw), dz = Math.sin(P.pitch);
+    for (let t = 0.3; t <= REACH; t += 0.04) {   // the server allows a little more (rules.ts withinReach)
+      const x = P.x + dx * t, y = P.y + dy * t, z = P.z + EYE + dz * t;
+      if (x > SHELF_FACE) continue;
+      if (x < -G || z < 0 || z > UNIT_H) return null;
+      const b = bookAt(y, z);
+      return { floor: P.floor, unit: b.unit, side: P.side, shelf: b.shelf, slot: b.slot };
+    }
+    return null;
+  }
+  function showPage() {
+    el('bAddr').textContent = `${tagOf(book)}  ·  ${sideName(book.side)} side · floor ${book.floor} · unit ${fmtUnit(book.unit)} · shelf ${book.shelf + 1} · book ${book.slot + 1}`;
+    el('bPage').textContent = `page ${book.page} of ${PAGES}`;
+    if (book.far) el('bAddr').textContent = `computed from this address alone · ${sideName(book.side)} side · floor ${bigShort(book.floor)} · unit ${bigShort(book.unit)} · shelf ${book.shelf + 1} · book ${book.slot + 1}`;
+    const text = book.text(), pre = el('bText');
+    pre.textContent = '';
+    let i = 0;   // finds count characters in reading order; the text has a newline after every 80
+    const pos = n => n + Math.floor(n / 80);
+    for (const f of book.here()) {
+      const a = pos(f.at), b = pos(f.at + f.len - 1) + 1;
+      if (a < i) continue;
+      pre.append(text.slice(i, a));
+      const m = document.createElement('mark'); m.textContent = text.slice(a, b); pre.append(m); i = b;
+    }
+    pre.append(text.slice(i));
+    const box = el('bFinds'); box.textContent = ''; box.hidden = el('bFindKey').hidden = !book.finds.length;
+    if (book.finds.length) box.append('Found here:');
+    for (const f of book.finds) {
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = f.page === book.page ? 'on' : '';
+      btn.textContent = `\u201c${short(f.text, 48)}\u201d p. ${f.page}`;
+      btn.addEventListener('click', () => { book.goTo(f.page); showPage(); });
+      box.append(btn);
+    }
+    showBookMarks();
+  }
+  function nextFind() {
+    if (reading && book.nextFind()) showPage();
+  }
+  const bookAddress = () => book.address();
+  function showBookMarks() {
+    const box = el('bMarks'); box.textContent = '';
+    if (!book || book.far) return;
+    for (const m of marksFor(book)) {
+      const d = document.createElement('div');
+      d.textContent = 'Someone left this book standing open.';
+      const who = document.createElement('small'); who.textContent = `  — ${m.author}`;
+      d.appendChild(who); box.appendChild(d);
+    }
+  }
+  // Auto-walk: keeps walking the way you face until Q (or Auto) again, S, or opening a book. Shift still hurries.
+  function setAutoWalk(on) {
+    if (autoWalk === on) return;
+    autoWalk = on; el('tAuto').classList.toggle('down', on); syncRunning();
+    notice(on ? `Walking on${isTouch ? '' : ' (Q or S to stop)'}.` : 'Stopped.', 1500);
+  }
+  function openBook() {
+    const b = lookTarget(); if (!b) return;
+    setAutoWalk(false);
+    if (refFrame.away) return openAway(b);
+    readBook(Book.home(b, { finds: finder ? finder.inBook(b) : [], send: m => session.send(m) }));
+  }
+  // The one way a book (book.js: a home one, or a far one) comes into the reader. One already open is closed first,
+  // so the world never thinks you are still reading it.
+  function readBook(b) {
+    if (reading && book) book.close();
+    book = b.open(); reading = true; showPage();
+    el('book').classList.add('open'); el('tPrev').hidden = el('tNext').hidden = false;
+    el('bNoteRow').hidden = el('bNoteKey').hidden = book.far || !session.online;
+  }
+  function closeBook() {
+    reading = false; el('book').classList.remove('open'); el('tPrev').hidden = el('tNext').hidden = true;
+    if (book) book.close();
+    pointer();
+  }
+  function turn(d) { if (!reading) return; book.turn(d); showPage(); }
+
+  // ---------------------------------------------------------------- reading at a distance
+  // search() in babel.js runs the library backwards: any text, placed on a page, is in exactly one book, and this
+  // says where. At the top of page 1 it is as near as it can be, about 10^(0.73 × length) floors and metres: past a
+  // few words that is beyond walking, so you read it from here (the reader opens it in place) or teleport.
+  const bigShort = b => { const d = describeBig(b); return d.includes('\u00d710^') ? d.replace(/^(\u2212?\d\.\d{3})\d*/, '$1').split(' (')[0] : d; };
+  let searchHit = null;
+  function toggleSearch(on = el('finder-dlg').hidden) {
+    el('finder-dlg').hidden = !on;
+    if (on) { showMyBook(); setTimeout(() => el('fText').focus(), 0); }
+    else el('fText').blur();
+    pointer();
+  }
+  function checkSearch() {
+    const t = queryText(el('fText').value);
+    const bad = [...new Set([...t].filter(ch => !LETTERS.includes(ch)))];
+    el('fCount').textContent = bad.length ? `not in the library: ${bad.slice(0, 6).map(c => JSON.stringify(c)).join(' ')}` : `${t.length} / ${LINES * COLS}`;
+    el('fCount').className = bad.length ? 'bad' : '';
+    el('fGo').disabled = !t.length || bad.length > 0;
+  }
+  function runSearch() {
+    const out = el('fOut'); out.hidden = false; out.textContent = 'Reading the library backwards\u2026';
+    setTimeout(() => {   // let the message paint: this takes a moment
+      try {
+        const page = +el('fPage').value || undefined;
+        const r = findText(el('fText').value, { page, blank: el('fBlank').checked });
+        searchHit = r; out.textContent = '';   // r.query is the text as placed: the box may change after this
+        const line = (label, value) => { const d = document.createElement('div'); const b = document.createElement('b'); b.textContent = label; d.append(b, ' ', value); out.append(d); };
+        line('Side', r.address.side === P.side ? `${sideName(r.address.side)}, ours` : `${sideName(r.address.side)}, across the shaft, among the savages`);
+        line('Floor', describeBig(r.address.floor)); line('Unit', describeBig(r.address.unit));
+        line('Shelf', `${r.address.shelf + 1}, book ${r.address.slot + 1}, page ${r.page}, line ${r.line}, column ${r.col}`);
+        line('On foot', `${describeWalk(r.address)} from the spawn.${/10\^/.test(describeWalk(r.address)) ? ' You have time.' : ''}`);
+        const go = document.createElement('button'); go.type = 'button'; go.textContent = 'Read it from here'; go.addEventListener('click', readFar);
+        const slip = document.createElement('button'); slip.type = 'button'; slip.className = 'quiet'; slip.textContent = 'Download call slip'; slip.addEventListener('click', downloadSlip);
+        const tp = document.createElement('button'); tp.type = 'button'; tp.textContent = 'Teleport there'; tp.addEventListener('click', teleport);
+        out.append(go, ...(LOCAL ? [tp] : []), slip);
+      } catch (e) { out.textContent = e.message; }
+    }, 20);
+  }
+  // The reader rebuilds the book from the address alone (not from anything search() returned) and highlights the
+  // text only where that book really has it: the proof that it was already there.
+  function openFar(address, page, line, col, text, finds = []) {
+    readBook(Book.far(address, { page, line, col, text, finds }));
+    toggleSearch(false);
+    if (book.there === false) notice('That text is not on this page of this book. The slip is wrong somewhere.', 6000);
+  }
+  function readFar() {
+    const r = searchHit; if (!r) return;
+    openFar(r.address, r.page, r.line, r.col, r.query);
+  }
+  // Teleport: stand in front of the searched book, on its own floor and unit, and look at it. Every shelf around is
+  // the real one for that far address, so walking off and opening the neighbours works too.
+  const TP_UNIT = 2;   // local unit to arrive at (clear of the stairs at y = 40n + 10)
+  const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);   // teleport is for the local app only, for now
+  for (const n of document.querySelectorAll('.local-only')) n.hidden = !LOCAL;
+  function teleport(hit) {
+    const r = hit && hit.address ? hit : searchHit; if (!r) return;
+    const from = { x: P.x, y: P.y, z: P.z, vz: P.vz, grounded: P.grounded, crossed: P.crossed, floor: P.floor, side: P.side, yaw: P.yaw, pitch: P.pitch };   // mid-fall too
+    const d = 0.8, zc = shelfZ(r.address.shelf) + 0.17;   // eye to spine across, and the middle of the spine
+    const to = { x: SHELF_FACE + d, y: slotY(TP_UNIT, r.address.slot), floor: 0, side: r.address.side || 0, yaw: Math.PI, pitch: Math.atan2(zc - EYE, d) };
+    refFrame.go({ hit: r, at: TP_UNIT, from, to });
+    toggleSearch(false);
+    notice(`You are at shelf ${r.address.shelf + 1}, book ${r.address.slot + 1}. E to open it · H to go back.`, 8000);
+  }
+  // Your book: the one that is nothing but your name, again and again, all 410 pages (babel.js repeatedBook). It is
+  // real, and like any whole book it is about 10^959,000 floors away. Found once per name, off the first frame.
+  let myBook = null;
+  function findMyBook(name) {
+    if (!name || (myBook && myBook.name === name)) return;
+    setTimeout(() => {
+      const r = repeatedBook(name); if (!r) return;
+      myBook = { name, told: false, hit: { address: r.address, page: 1, line: 1, col: 1, query: r.text } };
+      showMyBook(); tellMyBook();
+    }, 400);
+  }
+  function tellMyBook() {   // once per name, when you are in the library and it has been found
+    if (!myBook || myBook.told || !entry.classList.contains('hidden')) return;
+    myBook.told = true; const a = myBook.hit.address;
+    notice(`Somewhere in here is a book that is nothing but your name, page after page. It is ${describeWalk(a)}\u2019 walk away${a.side !== P.side ? ', across the shaft, among the savages' : ''}. ${isTouch ? 'Tap find' : 'Press /'} to read it.`, 9000);
+  }
+  function showMyBook() {
+    const box = el('fMine'); if (!myBook) { box.hidden = true; return; }
+    const a = myBook.hit.address; box.hidden = false; box.textContent = '';
+    const head = document.createElement('div'); const b = document.createElement('b'); b.textContent = 'Your book. ';
+    const q = document.createElement('q'); q.textContent = short(`${myBook.hit.query} `.repeat(6).trim(), 70);
+    head.append(b, q, ` and nothing else, for ${PAGES} pages.`);
+    const where = document.createElement('div');
+    where.textContent = `${cap(sideName(a.side))} side${a.side !== P.side ? ' (the savages\u2019)' : ''} \u00b7 floor ${bigShort(a.floor)} \u00b7 unit ${bigShort(a.unit)} \u00b7 shelf ${a.shelf + 1}, book ${a.slot + 1} \u00b7 ${describeWalk(a)} on foot.`;
+    const read = document.createElement('button'); read.type = 'button'; read.textContent = 'Read it'; read.addEventListener('click', () => openFar(a, 1, 1, 1, myBook.hit.query));
+    const tp = document.createElement('button'); tp.type = 'button'; tp.textContent = 'Teleport there'; tp.addEventListener('click', () => teleport(myBook.hit));
+    box.append(head, where, read, ...(LOCAL ? [tp] : []));
+  }
+  function goHome() {   // H: back to where the teleport started
+    if (!refFrame.away) return;
+    refFrame.leave('home');   // home first, so the world hears the book close (a book from your shelves tells it)
+    if (reading) closeBook();
+    notice('Back where you were.', 3000);
+  }
+  // Every change of frame (a teleport, H, a welcome, a correction): stand where the frame says (null: the world has
+  // placed you already), then marks and the server speak home addresses only; the finder is told where the shelves are now.
+  function leftHome({ origin, to }) {
+    if (to) Object.assign(P, { z: 0, vz: 0, grounded: true, crossed: false }, to);   // standing, unless the pose was mid-fall (H back into the shaft)
+    updateSegments(P.y, true); marksFloor = null; nearKey = ''; glowMesh.count = 0; hudTag = '';
+    if (finder) finder.setOrigin(origin);
+    showNear(true);
+  }
+  refFrame.on(leftHome);
+  function openAway(b) {
+    const a = refFrame.real(b), hit = refFrame.hit, h = hit.address;
+    const same = a.shelf === h.shelf && a.slot === h.slot && bigEqual(a.floor, h.floor) && bigEqual(a.unit, h.unit);
+    const scanned = finder ? finder.inBook(b) : [];   // what the finder read on these shelves, merged with the search's own find
+    try {
+      if (same) openFar(a, hit.page, hit.line, hit.col, hit.query, scanned);
+      else openFar(a, 1, 1, 1, '', scanned);
+    } catch (e) { notice(e.message, 4000); }
+  }
+  // A call slip: the address in full, as a file anyone can open here (or check with babel.js on their own).
+  function downloadSlip() {
+    const r = searchHit; if (!r) return;
+    const out = el('fOut'), note = document.createElement('div'); note.textContent = 'Writing out the address in full\u2026'; out.append(note);
+    setTimeout(() => {
+      const slip = { library: location.origin, about: 'A call slip for the library from A Short Stay in Hell. Open it with / and \u201cOpen a call slip\u201d, '
+          + 'or check it yourself: babel.js pageText({ floor: bigFromDecimal(floor), unit: bigFromDecimal(unit), side: side === "west" ? 1 : 0, shelf: shelf - 1, slot: book - 1 }, page).',
+        text: r.query, side: sideName(r.address.side), shelf: r.address.shelf + 1, book: r.address.slot + 1, page: r.page, line: r.line, column: r.col,
+        floor: bigToDecimal(r.address.floor), unit: bigToDecimal(r.address.unit) };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(slip, null, 1)], { type: 'application/json' }));
+      a.download = `call-slip-${r.query.replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'book'}.json`;
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      note.textContent = `Saved ${a.download} (${(slip.floor.length + slip.unit.length).toLocaleString('en-US')} digits).`;
+    }, 20);
+  }
+  async function openSlip(file) {
+    const out = el('fOut'); out.hidden = false; out.textContent = 'Reading the call slip\u2026';
+    try {
+      const s = JSON.parse(await file.text());
+      const address = { floor: bigFromDecimal(s.floor), unit: bigFromDecimal(s.unit), side: s.side === SIDES[1] ? 1 : 0, shelf: (s.shelf | 0) - 1, slot: (s.book | 0) - 1 };   // slips from before the sides are east
+      if (!(address.shelf >= 0 && address.shelf < SHELVES && address.slot >= 0 && address.slot < SLOTS && s.page >= 1 && s.page <= PAGES)) throw new Error('shelf, book or page out of range');
+      await new Promise(r => setTimeout(r, 20));
+      openFar(address, s.page | 0, s.line | 0 || 1, s.column | 0 || 1, typeof s.text === 'string' ? s.text : '');
+    } catch (e) { out.textContent = `Not a call slip this library can read: ${e.message}`; }
+  }
+  el('fSlip').addEventListener('click', () => el('fFile').click());
+  el('fFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) openSlip(f); });
+  el('fText').addEventListener('input', checkSearch);
+  el('fText').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !el('fGo').disabled) runSearch(); if (e.key === 'Escape') toggleSearch(false); });
+  for (const id of ['fPage', 'fBlank']) el(id).addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') toggleSearch(false); });
+  el('fGo').addEventListener('click', runSearch);
+  checkSearch();
+  function leaveMark() { if (reading) session.send(Proto.mark(bookAddress())); }   // an open book: the only mark there is
+  el('bLeave').addEventListener('click', () => leaveMark());
+
+  // ---------------------------------------------------------------- keys and help (?)
+  // The key list is the entry card's own, copied as it stands (online-only and local-only parts shown or not).
+  function toggleHelp(on = el('help-dlg').hidden) {
+    el('help-dlg').hidden = !on;
+    if (on) {
+      const box = el('helpKeys'); box.textContent = '';
+      box.append((isTouch ? el('keysTouch') : el('keysDesktop')).cloneNode(true)); box.firstChild.hidden = false; box.firstChild.removeAttribute('id');
+    }
+    pointer();
+  }
+  el('helpHow').addEventListener('click', e => { e.preventDefault(); toggleHow(true); toggleHelp(false); });   // how first: the pointer stays free
+
+  // ---------------------------------------------------------------- how it works
+  // Two tellings (simply, in depth) and three checks anyone can run: each uses the same babel.js that draws the
+  // shelves, in the visitor's own browser. Output is built from text nodes: the second check echoes what was typed.
+  function toggleHow(on = el('how-dlg').hidden) {
+    el('how-dlg').hidden = !on;
+    pointer();
+  }
+  for (const [btn, pane] of [['howSimple', 'howSimplePane'], ['howDeep', 'howDeepPane']]) el(btn).addEventListener('click', () => {
+    for (const [b2, p2] of [['howSimple', 'howSimplePane'], ['howDeep', 'howDeepPane']]) { el(b2).classList.toggle('on', b2 === btn); el(p2).hidden = p2 !== pane; }
+  });
+  el('howOpen').addEventListener('click', () => toggleHow(true));
+  el('howFromSearch').addEventListener('click', e => { e.preventDefault(); toggleSearch(false); toggleHow(true); });
+  el('how-dlg').addEventListener('click', e => { if (e.target.id === 'how-dlg') toggleHow(false); });
+  el('proveText').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') el('proveAny').click(); if (e.key === 'Escape') toggleHow(false); });
+  const coord = v => typeof v === 'number' ? fmtUnit(v) : bigShort(v).replace(/^-/, '\u2212');
+  const place = a => `${sideName(a.side)} side \u00b7 floor ${coord(a.floor)} \u00b7 ${coord(a.unit)} m along \u00b7 shelf ${a.shelf + 1}, book ${a.slot + 1}`;
+  function report(id, parts) {   // parts: strings, or [kind, text] with kind 'b', 'mark', 'yes', 'no'
+    const out = el(id); out.textContent = '';
+    for (const p of parts) {
+      if (typeof p === 'string') { out.append(p); continue; }
+      const n = document.createElement(p[0] === 'b' || p[0] === 'mark' ? p[0] : 'span'); if (p[0] === 'yes' || p[0] === 'no') n.className = p[0];
+      n.textContent = p[1]; out.append(n);
+    }
+  }
+  // A proof's result (proofs.js) as the dialog shows it: each step a bold label and its value, then the verdict.
+  function showProof(id, r) {
+    if (r.error) { report(id, [['no', r.error]]); return; }
+    const parts = [];
+    for (const s of r.steps) {
+      if (s.page) { const p = s.page; parts.push(['b', `${s.label}:\n`], p.text.slice(0, p.from), ['mark', p.text.slice(p.from, p.to)], p.text.slice(p.to) + '\u2026\n'); continue; }
+      parts.push(['b', `${s.label}: `], s.address ? place(s.address) : s.quote ? `\u201c${s.text}\u201d` : s.text, s.ms != null ? ` (${s.ms.toFixed(0)} ms)\n` : '\n');
+    }
+    parts.push([r.ok ? 'yes' : 'no', r.verdict]);
+    report(id, parts);
+  }
+  function runProof(btn, waiting, prove) {
+    el(btn).addEventListener('click', () => { report(`${btn}Out`, [waiting]); setTimeout(() => showProof(`${btn}Out`, prove()), 20); });
+  }
+  runProof('proveWalk', 'Reading the shelf\u2026', () => proveWalk(nearbyAddress()));
+  runProof('proveAny', 'Reading the library backwards\u2026', () => proveAny(el('proveText').value));
+  runProof('proveBook', `Reading ${PAGES} pages, then running them backwards\u2026`, () => proveBook(nearbyAddress()));
+
+  // ---------------------------------------------------------------- input
+  const entry = el('entry');
+  function lockPointer() { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* needs a user gesture */ } }
+  function enter() {
+    entry.classList.add('hidden'); syncRunning(); startFinder(); showNear(true);
+    findMyBook((session.you && session.you.name) || session.name()); tellMyBook();
+    pointer();
+    el('touch').classList.toggle('on', isTouch);
+  }
+  // What is showing, for modes.js: it says what a key, a tap or a close does, and whether the pointer is locked.
+  const mode = () => Modes.mode({ entry: !entry.classList.contains('hidden'), reading, touch: isTouch,
+    open: { help: !el('help-dlg').hidden, how: !el('how-dlg').hidden, search: !el('finder-dlg').hidden, map: !el('map').hidden } });
+  function pointer() {   // after anything opens or closes
+    const want = Modes.pointer(mode());
+    if (want === 'lock' && !locked && canvas.requestPointerLock) lockPointer();
+    else if (want === 'free' && document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+  }
+  function act(a, code) {   // a modes.js action
+    switch (a) {
+      case 'open:help': return toggleHelp(true);
+      case 'close:help': return toggleHelp(false);
+      case 'open:how': return toggleHow(true);
+      case 'close:how': return toggleHow(false);
+      case 'open:search': return toggleSearch(true);
+      case 'close:search': return toggleSearch(false);
+      case 'open:map': return el('map').hidden && toggleMap();
+      case 'close:map': return !el('map').hidden && toggleMap();
+      case 'open:book': return openBook();
+      case 'close:book': return closeBook();
+      case 'turn:1': return turn(1);
+      case 'turn:-1': return turn(-1);
+      case 'nextFind': return nextFind();
+      case 'leaveMark': return leaveMark();
+      case 'climb': return climb();
+      case 'autoWalk': return setAutoWalk(!autoWalk);
+      case 'stopAuto': return setAutoWalk(false);
+      case 'home': return goHome();
+      case 'near': nearOn = !nearOn; return showNear(true);
+      case 'hold': keys.add(code);
+    }
+  }
+  el('enter').addEventListener('click', enter);
+  if (isTouch) { el('keysDesktop').hidden = true; el('keysTouch').hidden = false; el('hKeys').hidden = true; el('hTouch').hidden = false; }
+  // No keyboard on a phone: buttons for what keys open, and every dialog can be closed by a button or a tap outside it
+  const tap = what => { const a = Modes.tap(mode(), what, { online: session.online }); if (a) act(a); };
+  for (const [id, what] of [['hFind', 'find'], ['hMap', 'map'], ['hHelp', 'help']]) el(id).addEventListener('click', () => tap(what));
+  for (const [id, dialog] of [['finder-dlg', 'search'], ['help-dlg', 'help'], ['how-dlg', 'how'], ['map', 'map']]) {
+    const d = el(id), b = document.createElement('button'), close = () => tap('close:' + dialog);
+    b.type = 'button'; b.className = 'xclose'; b.textContent = 'close'; b.setAttribute('aria-label', 'Close');
+    b.addEventListener('click', close); d.append(b);
+    d.addEventListener('click', e => { if (e.target === d) close(); });
+  }
+  document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; });
+  canvas.addEventListener('click', () => { if (!entry.classList.contains('hidden') || isTouch || locked) return; lockPointer(); });
+  document.addEventListener('mousemove', e => {
+    if (!locked || reading) return;
+    P.yaw -= e.movementX * 0.0022; P.pitch = Math.max(-1.45, Math.min(1.45, P.pitch - e.movementY * 0.0022));
+  });
+  document.addEventListener('keydown', e => {   // what a key does here is modes.js's: help over how over the search over the map over the book
+    const r = Modes.key(mode(), e, { typing: e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA', online: session.online, away: refFrame.away, far: !!(book && book.far), autoWalk });
+    for (const a of r.acts) act(a, e.code);
+    if (r.prevent) e.preventDefault();
+  });
+  document.addEventListener('keyup', e => keys.delete(e.code));
+  let tId = null, tx = 0, ty = 0;
+  canvas.addEventListener('touchstart', e => { const t = e.changedTouches[0]; tId = t.identifier; tx = t.clientX; ty = t.clientY; }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) if (t.identifier === tId && !reading) {
+      P.yaw -= (t.clientX - tx) * 0.005; P.pitch = Math.max(-1.45, Math.min(1.45, P.pitch - (t.clientY - ty) * 0.005));
+      tx = t.clientX; ty = t.clientY;
+    }
+  }, { passive: true });
+  const hold = (id, on, off) => { const b = el(id); b.addEventListener('pointerdown', e => { b.classList.add('down'); on(); b.setPointerCapture(e.pointerId); }); b.addEventListener('pointerup', () => { b.classList.remove('down'); off(); }); b.addEventListener('pointercancel', () => { b.classList.remove('down'); off(); }); };
+  hold('tWalk', () => { touchWalk = true; }, () => { touchWalk = false; });
+  el('tAuto').addEventListener('click', () => setAutoWalk(!autoWalk));
+  el('tOpen').addEventListener('click', () => { if (reading) closeBook(); else if (lookTarget()) openBook(); else climb(); });
+  el('tPrev').addEventListener('click', () => turn(-1));
+  el('tNext').addEventListener('click', () => turn(1));
+
+  // ---------------------------------------------------------------- HUD
+  const hud = { side: el('hSide'), floor: el('hFloor'), unit: el('hUnit'), books: el('hBooks'), fallen: el('hFallen') };
+  // where you are, always; this visit's tallies and what the shelves hold, behind "more" (remembered)
+  function setHudMore(on) { el('hExtra').hidden = !on; el('hMore').textContent = on ? 'less' : 'more'; el('hMore').setAttribute('aria-expanded', String(on)); store.set('hudMore', on ? '1' : ''); }
+  el('hMore').addEventListener('click', () => setHudMore(el('hExtra').hidden));
+  let hudT = 0, hudTag = '';   // hudTag: the local floor/unit the HUD last described while away ('' after any change of frame)
+  function updateHUD(dt) {
+    hudT += dt; if (hudT < 0.15) return; hudT = 0;
+    if (refFrame.away) {   // describing a million-digit number takes a moment: only when it changes
+      const k = `${P.floor}/${Math.floor(P.y)}`;
+      if (hudTag !== k) { hudTag = k; const r = refFrame.real({ floor: P.floor, unit: Math.floor(P.y) }); hud.floor.textContent = bigShort(r.floor); hud.unit.textContent = bigShort(r.unit); }
+    } else {
+      hud.side.textContent = sideName(P.side);
+      hud.floor.textContent = P.floor.toLocaleString();
+      hud.unit.textContent = Math.floor(P.y).toLocaleString();
+    }
+    hud.books.textContent = Math.round(P.dist * SHELVES * SLOTS).toLocaleString();
+    hud.fallen.textContent = P.fallen.toLocaleString();
+    if (session.online) netStatus();
+    if (!el('map').hidden && MAP.follow && !MAP.drag && performance.now() - MAP.drawnAt > 250) drawMap();
+    const tgt = !reading && lookTarget(), climbable = canClimb();
+    el('crosshair').classList.toggle('hot', !!tgt || climbable);
+    const prompt = el('prompt');
+    prompt.textContent = tgt ? (refFrame.away ? `E · open shelf ${tgt.shelf + 1}, book ${tgt.slot + 1} · H go back` : `E · open ${tagOf(tgt)}`) : climbable ? 'F · climb the railing' : '';
+    prompt.classList.toggle('on', (!!tgt || climbable) && !isTouch);
+  }
+
+  // ---------------------------------------------------------------- others (multiplayer; the page works alone when no server answers)
+  const store = {
+    get(k) { try { return localStorage.getItem('shortstay.' + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('shortstay.' + k, v); } catch (e) { /* private mode */ } },
+  };
+  setHudMore(store.get('hudMore') === '1');
+  let noticeT = 0;
+  function notice(text, ms) {
+    const n = el('notice'); n.textContent = text; n.classList.add('on');
+    clearTimeout(noticeT); noticeT = setTimeout(() => n.classList.remove('on'), ms || 5000);
+  }
+  function fmtIn(ms) {
+    const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+    return h ? `${h} h ${m} min` : m ? `${m} min` : `${s} s`;
+  }
+
+  // Figures for the people near you. Built on demand, disposed on departure.
+  const PEER_BODY = new THREE.CylinderGeometry(0.2, 0.24, 1.45, 10).rotateX(Math.PI / 2).translate(0, 0, 0.725);
+  const PEER_HEAD = new THREE.SphereGeometry(0.14, 12, 8).translate(0, 0, 1.62);
+  const matHuman = new THREE.MeshLambertMaterial({ color: 0x8c7658 }), matAgent = new THREE.MeshLambertMaterial({ color: 0x5d7489 });
+  const peers = new Map();
+  function nameSprite(name, kind) {
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96;
+    const g = cv.getContext('2d');
+    g.font = '500 44px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = 'rgba(11,9,6,.55)'; const w = Math.min(500, g.measureText(name).width + 36); g.fillRect(256 - w / 2, 14, w, 68);
+    g.fillStyle = kind === 'agent' ? '#b9cde0' : '#e8dcc2'; g.fillText(name, 256, 50);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, fog: true }));
+    s.scale.set(1.6, 0.3, 1); s.position.z = 2.0;
+    return s;
+  }
+  function updatePeerList(list) {
+    const seen = new Set();
+    for (const o of list) {
+      seen.add(o.id);
+      let p = peers.get(o.id);
+      if (!p || p.name !== o.name || p.side !== o.side) {
+        if (p) dropPeer(o.id);
+        const grp = new THREE.Group(), m = o.kind === 'agent' ? matAgent : matHuman;
+        grp.add(new THREE.Mesh(PEER_BODY, m), new THREE.Mesh(PEER_HEAD, m), nameSprite(o.side === P.side ? o.name : `${o.name} \u00b7 savage`, o.kind));
+        p = { grp, name: o.name, side: o.side, x: o.x, y: o.y, floor: o.floor, yaw: o.yaw };
+        scene.add(grp); peers.set(o.id, p);
+      }
+      if ((o.side || 0) !== P.side) {   // across the shaft: where they stand, seen from this side's frame
+        const a = acrossShaft(o.x, o.y); p.rx = a.x; p.ry = a.y; p.tyaw = o.yaw + Math.PI; p.vx = -(o.vx || 0); p.vy = -(o.vy || 0);
+      } else { p.rx = o.x; p.ry = o.y; p.tyaw = o.yaw; p.vx = o.vx || 0; p.vy = o.vy || 0; }
+      p.rt = performance.now(); p.tx = p.rx; p.ty = p.ry;   // reported here, now; carried forward by their velocity (animatePeers)
+      p.tfloor = o.floor;
+      if (p.floor !== o.floor) { p.floor = o.floor; p.x = p.tx; p.y = p.ty; }   // floor change: snap rather than glide through slabs
+    }
+    for (const id of [...peers.keys()]) if (!seen.has(id)) dropPeer(id);
+  }
+  function dropPeer(id) {
+    const p = peers.get(id); if (!p) return;
+    const sprite = p.grp.children[2]; sprite.material.map.dispose(); sprite.material.dispose();
+    scene.remove(p.grp); peers.delete(id);
+  }
+  function animatePeers(dt) {
+    const k = 1 - Math.exp(-dt * 8);
+    for (const p of peers.values()) {
+      const t = Math.min(EXTRAPOLATE_S, (performance.now() - (p.rt || 0)) / 1000);
+      if (p.rt) { p.tx = p.rx + (p.vx || 0) * t; p.ty = p.ry + (p.vy || 0) * t; }
+      p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k; p.yaw = p.tyaw;
+      const dz = (p.floor - P.floor) * FLOOR_PITCH;
+      p.grp.visible = Math.abs(p.floor - P.floor) <= GHOST;
+      p.grp.position.set(p.x, p.y, dz); p.grp.rotation.z = p.yaw;
+    }
+  }
+
+  // Marks: a pale book pulled half out when left open, the only mark there is.
+  const marks = new Map();
+  const MAX_MARKS = 256;
+  const openMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.26, 0.026, 0.29), new THREE.MeshLambertMaterial({ color: 0xd8c7a0 }), MAX_MARKS);
+  openMesh.count = 0; openMesh.frustumCulled = false;
+  scene.add(openMesh);
+  const markKey = a => `${a.side || 0}/${a.floor}/${a.unit}/${a.shelf}/${a.slot}`;
+  const marksFor = b => [...marks.values()].filter(m => markKey(m) === markKey(b));
+  let marksFloor = null;
+  function rebuildMarks() {
+    const d = new THREE.Object3D(); let no = 0;
+    marksFloor = P.floor;
+    for (const m of refFrame.away ? [] : [...marks.values()].filter(m => (m.side || 0) === P.side)) {
+      const df = m.floor - P.floor; if (Math.abs(df) > 2) continue;
+      const y = slotY(m.unit, m.slot), z = df * FLOOR_PITCH + shelfZ(m.shelf);
+      if (m.kind === 'open_book' && no < MAX_MARKS) { d.position.set(-G + 0.04 + 0.13 + 0.14, y, z + 0.15); d.updateMatrix(); openMesh.setMatrixAt(no++, d.matrix); }
+    }
+    openMesh.count = no; openMesh.instanceMatrix.needsUpdate = true;
+    if (reading) showBookMarks();
+  }
+
+  // ---------------------------------------------------------------- words nearby
+  // finder.js reads the shelves around you (on the GPU when there is one) for runs of English words; the best
+  // few near you are listed top right, and their spines glow.
+  let finder = null, nearOn = true, nearKey = '', nearAt = 0;
+  const MAX_GLOW = 8;
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0xf2c75c, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const glowMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.005, 0.028, 0.3), glowMat, MAX_GLOW);
+  glowMesh.count = 0; glowMesh.frustumCulled = false; scene.add(glowMesh);
+  function startFinder() {   // ?scan=cpu or ?scan=page forces that path, for testing
+    if (!finder) finder = createFinder({ onChange: () => showNear(false), onFinds: finds => session.offer(finds), force: new URLSearchParams(location.search).get('scan') });
+  }
+  function whereLabel(f) {
+    const dy = slotY(f.unit, f.slot) - P.y, df = f.floor - P.floor, ahead = dy * Math.sin(P.yaw) >= 0;
+    const floors = df ? `${Math.abs(df)} floor${Math.abs(df) > 1 ? 's' : ''} ${df > 0 ? 'up' : 'down'}, ` : '';
+    return floors + (Math.abs(dy) < 1.5 && !df ? 'here' : `${Math.round(Math.abs(dy))} m ${ahead ? 'ahead' : 'behind'}`);
+  }
+  function showNear(force) {
+    const box = el('near');
+    box.hidden = !nearOn || !finder || finder.mode === 'off' || !entry.classList.contains('hidden');
+    if (!finder) return;
+    const now = performance.now();
+    if (!force && now - nearAt < 250) return;
+    nearAt = now;
+    const list = finder.nearby(P.floor, P.y, 5), k = list.map(f => `${f.floor}/${f.unit}/${f.shelf}/${f.slot}/${f.page}/${f.at}`).join(' ');
+    const read = finder.scannedTo(P.floor, P.y), slow = finder.speed > 0.5 && finder.speed > finder.rate;
+    const farScan = finder.far;
+    el('nearStatus').textContent = farScan ? `far away: reading these shelves on ${farScan.workers} CPU core${farScan.workers > 1 ? 's' : ''}, `
+        + (farScan.rate ? `about ${Math.round(1 / farScan.rate)} s a metre · ±${read.metres} m read` : 'the first metre takes a while')
+      : finder.mode === 'starting' ? 'starting…'
+      : `${finder.mode === 'gpu' ? (finder.where === 'page' ? 'GPU, on the page' : 'GPU') : finder.why === 'blocked' ? 'CPU: WebGPU is turned off or blocked in this browser' : finder.why === 'none' ? 'CPU: this browser has no WebGPU (Chrome reads ~100\u00d7 faster)' : 'CPU'} · ${finder.rate >= 10 ? Math.round(finder.rate) : finder.rate.toFixed(1)} m/s · `
+        + (read.ahead ? `${read.metres} of the next 20 m read` : `±${read.metres} m read`) + (slow ? ' · slower than you are moving' : '');
+    const ol = el('nearList'); ol.textContent = '';
+    if (!list.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = finder.mode === 'starting' ? 'Reading the shelves…' : 'Nothing yet. Keep walking.'; ol.append(li); }
+    for (const f of list) {
+      const li = document.createElement('li'), ph = document.createElement('div'), wh = document.createElement('div');
+      const where = whereLabel(f); li.className = where === 'here' ? 'here' : '';
+      ph.className = 'phrase'; ph.textContent = `\u201c${f.text}\u201d`; ph.title = f.text;
+      wh.className = 'where';
+      const b = document.createElement('b'); b.textContent = where;
+      const sup = document.createElement('sup'); sup.textContent = Math.round(finder.rarity(f));
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = tagOf(f);
+      wh.append(tag, ` p. ${f.page} · `, b, ' · 1 in 10', sup);
+      li.append(ph, wh); ol.append(li);
+    }
+    if (k !== nearKey) {   // move the glow onto these spines
+      nearKey = k;
+      const d = new THREE.Object3D(); let n = 0;
+      for (const f of list) {
+        if (n >= MAX_GLOW) break;
+        d.position.set(SHELF_FACE + 0.003, slotY(f.unit, f.slot), (f.floor - P.floor) * FLOOR_PITCH + shelfZ(f.shelf) + 0.16);
+        d.updateMatrix(); glowMesh.setMatrixAt(n++, d.matrix);
+      }
+      glowMesh.count = n; glowMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+  let glowFloor = null;
+
+  // The world, through one session (session.js): it keeps the connection and what the world said, and paces what the
+  // page tells it (move reports, claims). Below it, the adapter: what changed goes into the player, the marks, the
+  // people around you and the HUD, and the session is handed the player each frame (netTick).
+  const session = createSession({
+    url: (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws',
+    storage: store, paused: refFrame.paused,   // teleported far away: the world hears nothing until you come back
+  });
+  // What the page reads of the world (online, you, roster, board, night, nextAt) it reads off the session itself.
+  // The rest is the adapter's own work: whether there is a world to join, the HUD's line about it, the player copied
+  // into the body the session paces its reports by, and the session's events applied to the player, marks and DOM.
+  /** Join the world, if there is one: a page opened from a file, or a server that doesn't answer, walks alone. */
+  async function netProbe() {
+    if (!/^https?:$/.test(location.protocol)) return;
+    try { const r = await fetch('/api/hello', { cache: 'no-store' }); if (r.ok && (await r.json()).ok) session.connect(); } catch (e) { /* no server: alone */ }
+  }
+  function netStatus() {
+    el('hNet').textContent = !session.online ? (session.replaced ? 'This library is open in another tab.' : session.full ? 'Crowded tonight: alone for now' : 'Alone: nothing here is shared')
+      : `${session.others ? session.others + (session.others === 1 ? ' other' : ' others') + ' nearby' : 'No one nearby'} · night in ${fmtIn(session.nextAt - Date.now())}`;
+  }
+  const netBody = { x: 0, y: 0, floor: 0, side: 0, yaw: 0, vx: 0, vy: 0, reading: false };   // the player, as the session sees them
+  /** Each frame: the player handed to the session, which decides whether the world should hear of it. */
+  function netTick(dt) {
+    const b = netBody; b.x = P.x; b.y = P.y; b.floor = P.floor; b.side = P.side; b.yaw = P.yaw; b.vx = P.vx; b.vy = P.vy; b.reading = reading;
+    session.tick(dt, b);
+  }
+  session.on('online', on => {
+    for (const n of document.querySelectorAll('.online-only')) n.hidden = !on;
+    el('nameRow').hidden = !on;
+    if (!on) updatePeerList([]);
+    netStatus();
+  });
+  session.on('welcome', (m, { nameChanged }) => {
+    const y = m.you;   // the server remembers where you were; everyone new starts at the same spot
+    if (y.x <= 0) { P.x = clampWalkway(y.x); P.z = 0; P.vz = 0; P.grounded = true; }
+    else { P.x = y.x; P.grounded = false; }
+    P.y = y.y; P.floor = y.floor; P.side = y.side === 1 ? 1 : 0; P.crossed = !!y.crossed;   // mid-fall: whether this fall has crossed already, as the world has it
+    refFrame.leave('welcome');   // teleported (a reconnect while away): home now, where the world says
+    // a given name shows until you choose your own; a name the world changed is kept by the session
+    if (nameChanged) el('nameIn').value = y.name;
+    findMyBook(y.name);   // a new name, a new book
+  });
+  session.on('correct', m => {
+    P.x = m.x <= 0 ? clampWalkway(m.x) : m.x; P.y = m.y; P.floor = m.floor; P.crossed = !!m.crossed;
+    if (m.side !== undefined && m.side !== P.side) { P.side = m.side; marksFloor = null; }
+    if (m.x <= 0) { P.z = 0; P.vz = 0; P.grounded = true; }
+    refFrame.leave('correct');   // teleported (night, say): home now, where the world says
+    if (m.reason === 'night') notice('Night. You wake on the walkway of the floor you fell to.', 7000);
+  });
+  session.on('peers', list => updatePeerList(list));
+  session.on('roster', () => { if (!el('map').hidden) drawMap(); });
+  session.on('board', () => { if (!el('map').hidden) drawBoard(); });
+  session.on('found', m => {
+    for (const r of m.results) if (r.ok && r.first && r.rank <= 50) notice(`You were first to find \u201c${short(r.text, 90)}\u201d${r.text.endsWith('.') ? '' : '.'} It is #${r.rank} of the rarest finds on the ${r.side || sideName(P.side)} side${r.overall && r.overall <= 50 ? `, #${r.overall} counting ${SAVAGES}` : ''} (M).`, 7000);
+  });
+  session.on('marks', all => { marks.clear(); for (const [id, k] of all) marks.set(id, k); rebuildMarks(); });
+  session.on('marked', () => notice('You left the book standing open.', 3000));
+  session.on('night', () => notice('Night falls. Every mark in the library is gone.', 7000));
+  session.on('replaced', () => notice('You opened the library in another tab.', 7000));
+  session.on('full', () => notice('The library is crowded tonight. You walk alone for now; others will be back.', 8000));
+  session.on('error', m => { if (m.for === 'mark' || m.for === 'open') notice(m.reason, 3000); else console.warn('[net]', m); });
+  session.on('message', () => netStatus());
+
+  // Each side has its own board; the other side's is the savages', and both together is the whole library's.
+  // Which finds a tab lists is mapview.js's boardView; this paints them.
+  let boardTab = 'ours';
+  function drawBoard() {
+    const ol = el('boardList'), b = session.board; ol.textContent = '';
+    const tabs = el('boardTabs'); tabs.textContent = '';
+    const labels = { ours: `ours · ${sideName(P.side)}`, theirs: `the savages' · ${sideName(P.side ^ 1)}`, both: 'both sides' };
+    for (const k of MapView.BOARD_TABS) {
+      const t = document.createElement('button'); t.type = 'button'; t.textContent = labels[k]; t.className = k === boardTab ? 'on' : '';
+      t.addEventListener('click', () => { boardTab = k; drawBoard(); }); tabs.append(t);
+    }
+    const v = MapView.boardView(b, boardTab, P.side, session.you && session.you.name), side = v.side, min = v.min, list = v.rows;
+    el('boardNote').textContent = v.empty ? '' : side === P.side ? `each checked by the server · a find here needs ${min}+ characters to place`
+      : side === null ? 'the rarest of either side' : `found by ${SAVAGES} · theirs needs ${min}+ characters`;
+    if (!list.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = side === P.side || side === null ? 'Nothing yet. Walk, and let the shelves be read.' : 'Nothing yet. Perhaps they cannot read.'; ol.append(li); return; }
+    for (const { rank, find: f, mine, savage } of list) {
+      const li = document.createElement('li'), rk = document.createElement('span'), ph = document.createElement('span'), by = document.createElement('span');
+      li.className = mine ? 'me' : '';
+      rk.className = 'rk'; rk.textContent = `${rank}.`;
+      ph.className = 'ph'; ph.textContent = `\u201c${f.text}\u201d`; ph.title = f.text;
+      const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = tagOf(f);
+      const who = document.createElement('b'); who.textContent = f.finder + (f.agent ? ' ·ai' : '') + (savage ? ' · savage' : '');
+      by.className = 'by';
+      by.append(tag, ` p. ${f.page} · ${side === null ? `${sideName(f.side)} · ` : ''}floor ${fmtUnit(f.floor)} · 1 in 10`);
+      const sup = document.createElement('sup'); sup.textContent = Math.round(rarity(f)); by.append(sup, ' · ', who, ` · ${new Date(f.foundAt).toLocaleDateString()}`);
+      li.append(rk, ph, by); ol.append(li);
+    }
+  }
+  function toggleMap() {
+    const m = el('map'); m.hidden = !m.hidden;
+    if (!m.hidden) {
+      Object.assign(MAP, { follow: true, log: false, ppm: MAP_PPM, hover: null }); loadMapFinds();
+      session.send(Proto.map()); drawMap(); drawBoard();
+      clearInterval(MAP.poll); MAP.poll = setInterval(() => { if (el('map').hidden) clearInterval(MAP.poll); else session.send(Proto.map()); }, 5000);   // the roster comes when asked
+    }
+    pointer();   // free while it shows; closed, back to walking (it never used to re-lock)
+  }
+
+  // ---------------------------------------------------------------- the map: your wall, face-on
+  // The wall you walk along, as seen from the shaft: each floor a row of shelves (2.4 m of them under 0.8 m of slab
+  // and ceiling), the stairs climbing beside the railing every 40 m, people on their floors, and the rarest finds on
+  // their shelves, brighter and larger the rarer. Only this wall: the far gallery is the same wall turned round, and
+  // anyone over the railing is in the shaft, not on it. It opens at true scale around you; the wheel (or − and +)
+  // zooms out until the whole library takes over on log scales, and back in. Drag to look along; double-click returns.
+  // Where everything goes, how big and how bright, is mapview.js's (wallScene, libraryScene); these only paint it.
+  const { MAP_PPM } = MapView, MAP_GOLD = '242,199,92';
+  const MAP = { ppm: MAP_PPM, log: false, follow: true, cx: 0, cz: 0, finds: [], findsAt: 0, hover: null, drag: null, drawnAt: 0 };
+  async function loadMapFinds() {
+    if (performance.now() - MAP.findsAt < 30000) return;
+    MAP.findsAt = performance.now();
+    try { const j = await (await fetch('/api/finds?limit=200')).json(); MAP.finds = j.sides ? j.sides.flatMap(sd => sd.top) : j.top || []; if (!el('map').hidden) drawMap(); } catch (e) { /* offline: the board's top 50 will do */ }
+  }
+  const mapFinds = () => MAP.finds.length ? MAP.finds : Proto.boardFinds(session.board);
+  function mapZoom(k) { Object.assign(MAP, MapView.zoomed(MAP, k)); MAP.hover = null; drawMap(); }
+  // book spines when close enough to see them: a few warm tones, fixed per book
+  const SPINES = ['#6b3d24', '#7a5230', '#4e3a26', '#8a6a3c', '#5a2e22', '#3f4a3a', '#6e5a3e', '#512f2a'];
+  function drawWall(g, W, H, people, finds) {
+    const s = MapView.wallScene(MAP, people, finds, W, H), ppm = s.ppm;
+    MAP.cx = s.cx; MAP.cz = s.cz;   // following you, the view centres on you
+    g.fillStyle = '#0d0a07'; g.fillRect(0, 0, W, H);
+    for (const r of s.rows) {
+      g.fillStyle = 'rgba(122,86,50,.62)'; g.fillRect(0, r.top, W, r.bot - r.top);
+      if (ppm >= MapView.SPINES_PPM) {   // spines: 32 to a shelf, 6 shelves to a unit
+        MapView.eachSpine(s, r, (x, y, w, h, tone, alpha) => { g.fillStyle = SPINES[tone]; g.globalAlpha = alpha; g.fillRect(x, y, w, h); });
+        g.globalAlpha = 1;
+      }
+      if (r.shelves.length) {   // the six shelves
+        g.strokeStyle = 'rgba(40,26,14,.85)'; g.lineWidth = 1; g.beginPath();
+        for (const yy of r.shelves) { g.moveTo(0, yy); g.lineTo(W, yy); }
+        g.stroke();
+      }
+      g.strokeStyle = s.step === 1 ? 'rgba(40,26,14,.9)' : 'rgba(40,26,14,.6)'; g.beginPath();
+      for (const xx of s.dividers) { g.moveTo(xx, r.top); g.lineTo(xx, r.bot); }
+      g.stroke();
+      g.strokeStyle = 'rgba(216,203,176,.28)'; g.beginPath(); g.moveTo(0, r.edge); g.lineTo(W, r.edge); g.stroke();   // the walkway's edge
+      if (r.stairs.length) {   // stairs: a 4.8 m flight beside the railing every 40 m, from this floor to the next
+        g.strokeStyle = `rgba(216,203,176,${ppm >= 12 ? 0.22 : 0.45})`; g.lineWidth = Math.max(1, Math.min(4, ppm * 0.12)); g.beginPath();
+        for (const [x0, y0, x1, y1] of r.stairs) { g.moveTo(x0, y0); g.lineTo(x1, y1); }
+        g.stroke(); g.lineWidth = 1;
+      }
+    }
+    // floor labels (as many as fit) and metres along the bottom
+    g.font = '11px "IBM Plex Mono", monospace'; g.textBaseline = 'middle';
+    for (const l of s.floorLabels) {
+      g.fillStyle = 'rgba(13,10,7,.7)'; g.fillRect(0, l.y - 8, 44, 16);
+      g.fillStyle = l.me ? '#f1c27d' : 'rgba(216,203,176,.75)'; g.textAlign = 'left'; g.fillText(`fl ${fmtUnit(l.floor)}`, 4, l.y);
+    }
+    g.fillStyle = 'rgba(13,10,7,.75)'; g.fillRect(0, H - 16, W, 16);
+    g.fillStyle = 'rgba(216,203,176,.6)'; g.textAlign = 'center';
+    for (const l of s.metreLabels) g.fillText(`${fmtUnit(l.metres)} m`, l.x, H - 8);
+    // finds, then people (the ones off the view sit at its edge, pointing the way)
+    for (const { x: fx, y: fy, look: k, book } of s.finds) {
+      if (book) {   // close enough to see books: the find's own spine lights up
+        const bh = book.h, gr = g.createRadialGradient(fx, fy, 0, fx, fy, bh); gr.addColorStop(0, `rgba(${MAP_GOLD},${k.a * 0.55})`); gr.addColorStop(1, `rgba(${MAP_GOLD},0)`);
+        g.fillStyle = gr; g.fillRect(fx - bh, fy - bh, bh * 2, bh * 2);
+        g.fillStyle = `rgba(${MAP_GOLD},${0.45 + 0.55 * k.a})`; g.fillRect(book.x, book.y, book.w, bh); continue;
+      }
+      if (k.t > 0.7) { const gr = g.createRadialGradient(fx, fy, 0, fx, fy, k.r * 4); gr.addColorStop(0, `rgba(${MAP_GOLD},${k.a * 0.5})`); gr.addColorStop(1, `rgba(${MAP_GOLD},0)`); g.fillStyle = gr; g.fillRect(fx - k.r * 4, fy - k.r * 4, k.r * 8, k.r * 8); }
+      g.fillStyle = `rgba(${MAP_GOLD},${k.a})`; g.beginPath(); g.arc(fx, fy, k.r, 0, Math.PI * 2); g.fill();
+    }
+    for (const d of s.people) {
+      const p = d.person;
+      g.fillStyle = p.me ? '#f1c27d' : p.kind === 'agent' ? '#8fb1cf' : '#e9dfc8'; g.globalAlpha = d.alpha;
+      g.strokeStyle = '#0d0a07'; g.lineWidth = 2; g.beginPath(); g.arc(d.x, d.y, d.r, 0, Math.PI * 2); g.stroke(); g.fill(); g.lineWidth = 1;
+      if (d.label) { g.textAlign = d.align; g.fillText(d.label, d.lx, d.y); }
+      g.globalAlpha = 1;
+    }
+    return s.hits;
+  }
+  // the whole library: everyone and every find on symmetric-log scales, floors as rows where the scale has room
+  function drawLibrary(g, W, H, people, finds) {
+    const s = MapView.libraryScene(session.roster, people, finds, W, H, session.you ? session.you.id : null), pad = s.pad;
+    g.fillStyle = '#0d0a07'; g.fillRect(0, 0, W, H);
+    for (const r of s.rows) { g.fillStyle = 'rgba(122,86,50,.35)'; g.fillRect(r.x, r.y, r.w, r.h); }   // rows near home, where they are at least 3 px apart
+    g.font = '11px "IBM Plex Mono", monospace'; g.textBaseline = 'middle';
+    g.strokeStyle = 'rgba(216,203,176,.12)'; g.fillStyle = 'rgba(216,203,176,.45)'; g.lineWidth = 1;
+    for (const t of s.xTicks) {
+      g.beginPath(); g.moveTo(t.x, pad / 2); g.lineTo(t.x, H - pad / 2); g.stroke();
+      g.textAlign = 'center'; g.fillText(t.label, t.x, H - 8);
+    }
+    for (const t of s.yTicks) {
+      g.beginPath(); g.moveTo(pad, t.y); g.lineTo(W - pad / 2, t.y); g.stroke();
+      g.textAlign = 'right'; g.fillText(t.label, pad - 6, t.y);
+    }
+    for (const { x, y, look: k } of s.finds) { g.fillStyle = `rgba(${MAP_GOLD},${k.a})`; g.beginPath(); g.arc(x, y, k.r, 0, Math.PI * 2); g.fill(); }
+    for (const d of s.people) {
+      const p = d.person;
+      g.fillStyle = p.me ? '#f1c27d' : p.kind === 'agent' ? '#8fb1cf' : '#d8cbb0';
+      g.globalAlpha = d.alpha;
+      g.beginPath(); g.arc(d.x, d.y, d.r, 0, Math.PI * 2); g.fill();
+      if (d.label) { g.textAlign = 'left'; g.fillText(d.label, d.x + 8, d.y); }
+      g.globalAlpha = 1;
+    }
+    if (s.reach) {   // your farthest reach along each axis
+      g.strokeStyle = 'rgba(241,194,125,.55)'; g.setLineDash([3, 4]);
+      g.beginPath(); g.moveTo(s.reach.x, pad / 2); g.lineTo(s.reach.x, H - pad / 2); g.stroke();
+      g.beginPath(); g.moveTo(pad, s.reach.y); g.lineTo(W - pad / 2, s.reach.y); g.stroke();
+      g.setLineDash([]);
+    }
+    return s.hits;
+  }
+  function drawMap() {
+    const cv = el('mapCv'), g = cv.getContext('2d'), W = cv.width, H = cv.height, meId = session.you && session.you.id, list = session.roster;
+    // people on this wall: everyone at the gallery's side of the railing (those over it are in the shaft), and you
+    const people = MapView.wallPeople(list, P, meId);
+    const finds = MapView.sideFinds(mapFinds(), P.side);
+    MAP.hits = MAP.log ? drawLibrary(g, W, H, people, finds) : drawWall(g, W, H, people, finds);
+    MAP.drawnAt = performance.now();
+    const h = MAP.hover;
+    if (h) {   // the label for whatever the pointer is on
+      const t = h.find ? `“${short(h.find.text, 60)}”  ${tagOf(h.find)} p. ${h.find.page} · floor ${fmtUnit(h.find.floor)} · 1 in 10^${Math.round(rarity(h.find))} · ${h.find.finder}`
+        : h.person.me ? 'you' : `${h.person.name} · floor ${fmtUnit(h.person.floor)} · ${Math.round(h.person.y).toLocaleString()} m${h.person.present ? '' : ' · away'}`;
+      g.font = '12px "IBM Plex Mono", monospace'; const tw = g.measureText(t).width + 14, tx = Math.max(4, Math.min(W - tw - 4, h.x - tw / 2)), ty = h.y > 40 ? h.y - 30 : h.y + 14;
+      g.fillStyle = 'rgba(11,9,6,.92)'; g.fillRect(tx, ty, tw, 20); g.strokeStyle = 'rgba(216,203,176,.35)'; g.strokeRect(tx + .5, ty + .5, tw - 1, 19);
+      g.fillStyle = '#f3ead7'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(t, tx + 7, ty + 10);
+    }
+    el('mapTitle').textContent = MAP.log ? `The whole ${sideName(P.side)} side` : `The ${sideName(P.side)} wall, ours · floor ${fmtUnit(P.floor)}`;
+    el('mapFoot').textContent = MAP.log ? 'metres along the gallery → · floor ↑ · both on a log scale · zoom in to come back'
+      : `${MapView.across(W, MAP.ppm)} m across · drag to look along · double-click: back to you · gold: finds`;
+    el('mapNight').textContent = session.night == null ? '' : `night falls in ${fmtIn(session.nextAt - Date.now())}`;
+    const ol = el('mapList'); ol.textContent = '';
+    for (const p of list.slice(0, 24)) {
+      const li = document.createElement('li'), me = p.id === meId; li.className = me ? 'me' : '';
+      const b = document.createElement('b'); b.textContent = me ? `${p.name} (you)` : p.name + (p.kind === 'agent' ? ' ·ai' : '');
+      // one line each: where they are now, then (quieter) the farthest they have been, if anywhere
+      const where = `${(p.side || 0) !== P.side ? `${sideName(p.side)}, a savage · ` : ''}${p.x > 0 ? 'in the shaft · ' : ''}fl ${fmtUnit(p.floor)} · ${fmtUnit(Math.round(p.y))} m`;
+      const far = p.farthestAt ? `farthest ${fmtUnit(Math.round(p.farthestY))} m, fl ${fmtUnit(p.farthestFloor)}` : '';
+      const w = document.createElement('span'); w.textContent = ' ' + where;
+      const f = document.createElement('small'); f.textContent = far;
+      li.title = `${p.name}: ${where}${far ? ` · ${far} (${new Date(p.farthestAt).toLocaleDateString()})` : ''}`;
+      li.append(b, w, f);
+      ol.appendChild(li);
+    }
+  }
+  {   // the map's pointer: wheel and buttons zoom, drag looks along the wall, hover names a find or a person
+    const cv = el('mapCv'), at = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; };
+    cv.addEventListener('wheel', e => { e.preventDefault(); mapZoom(e.deltaY < 0 ? 1.18 : 1 / 1.18); }, { passive: false });
+    el('mapIn').addEventListener('click', () => mapZoom(1.6)); el('mapOut').addEventListener('click', () => mapZoom(1 / 1.6));
+    cv.addEventListener('pointerdown', e => { if (MAP.log) return; MAP.drag = { ...at(e), cx: MAP.cx, cz: MAP.cz }; cv.setPointerCapture(e.pointerId); cv.classList.add('dragging'); });
+    cv.addEventListener('pointerup', () => { MAP.drag = null; cv.classList.remove('dragging'); });
+    cv.addEventListener('pointermove', e => {
+      const p = at(e);
+      if (MAP.drag) { MAP.follow = false; Object.assign(MAP, MapView.dragged(MAP.drag, p, MAP.ppm)); MAP.hover = null; drawMap(); return; }
+      const best = MapView.pick(MAP.hits, p);
+      if (best !== MAP.hover) { MAP.hover = best; drawMap(); }
+    });
+    cv.addEventListener('pointerleave', () => { if (MAP.hover) { MAP.hover = null; drawMap(); } });
+    cv.addEventListener('dblclick', () => { MAP.follow = true; drawMap(); });
+  }
+  el('nameIn').addEventListener('change', e => {
+    const n = e.target.value.trim().slice(0, 32); store.set('name', n);
+    if (n) session.restart();   // reconnects with the new name
+  });
+  if (session.name()) el('nameIn').value = session.name();
+  netProbe();
+
+  // ---------------------------------------------------------------- loop
+  function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+  window.addEventListener('resize', resize);
+  const look = new THREE.Vector3();
+  let last = performance.now(), running = false, rafId = 0;
+  // Paused when the window loses focus, unless auto-walking: then you keep walking (and reading the shelves) while
+  // you do something else, as long as the window is visible. A hidden tab gets no frames at all.
+  const wantRun = () => !document.hidden && (document.hasFocus() || autoWalk) && entry.classList.contains('hidden');
+  function setRunning(on) {
+    if (on === running) return;
+    running = on; keys.clear(); touchWalk = false;
+    if (on) { last = performance.now(); rafId = requestAnimationFrame(frame); } else cancelAnimationFrame(rafId);
+  }
+  function syncRunning() { setRunning(wantRun()); }
+  document.addEventListener('visibilitychange', syncRunning);
+  window.addEventListener('focus', syncRunning);
+  window.addEventListener('blur', () => { keys.clear(); touchWalk = false; syncRunning(); });   // keys held at blur never see their keyup
+  // ?stats: frame rate, CPU time per frame and the renderer's counts in window.__stats, for tuning (scripts only)
+  const STATS = new URLSearchParams(location.search).has('stats') ? { frames: 0, jsMs: 0, at: performance.now(), buildMs: [] } : null;
+  function frame(now) {
+    if (!running) return;
+    const dt = (now - last) / 1000;
+    if (dt < (STATS && STATS.uncapped ? 0 : 1 / 62)) { rafId = requestAnimationFrame(frame); return; }   // hold to ~60 fps on high-refresh displays
+    last = now; const t0 = STATS ? performance.now() : 0;
+    step(dt);
+    camera.position.set(P.x, P.y, P.z + EYE);
+    const cp = Math.cos(P.pitch);
+    look.set(P.x + cp * Math.cos(P.yaw), P.y + cp * Math.sin(P.yaw), P.z + EYE + Math.sin(P.pitch));
+    camera.lookAt(look);
+    for (const c of capFollow) c.position.y = P.y;
+    if (marksFloor !== P.floor) rebuildMarks();
+    if (finder) {
+      finder.at(P.floor, P.y, P.side);
+      if (glowFloor !== P.floor) { glowFloor = P.floor; nearKey = ''; showNear(true); } else showNear(false);
+      glowMat.opacity = 0.55 + 0.3 * Math.sin(now / 420);
+    }
+    animatePeers(dt); netTick(dt); DUST(dt);
+    updateHUD(dt);
+    const gl = STATS && renderer.getContext(), tq = STATS && (STATS.tq ??= gl.getExtension('EXT_disjoint_timer_query_webgl2') || false);
+    let q = null; if (tq && !STATS.pending) { q = gl.createQuery(); gl.beginQuery(tq.TIME_ELAPSED_EXT, q); }
+    renderer.render(scene, camera);
+    if (q) { gl.endQuery(tq.TIME_ELAPSED_EXT); STATS.pending = q; }
+    if (STATS && STATS.pending && !q && gl.getQueryParameter(STATS.pending, gl.QUERY_RESULT_AVAILABLE)) {   // the GPU's own time for one frame
+      if (!gl.getParameter(tq.GPU_DISJOINT_EXT)) (STATS.gpu ??= []).push(gl.getQueryParameter(STATS.pending, gl.QUERY_RESULT) / 1e6);
+      gl.deleteQuery(STATS.pending); STATS.pending = null;
+    }
+    if (STATS) {
+      STATS.frames++; STATS.jsMs += performance.now() - t0;
+      if (now - STATS.at > 1000) {
+        const i = renderer.info;
+        window.__stats = { fps: Math.round(STATS.frames * 1000 / (now - STATS.at)), jsMsPerFrame: +(STATS.jsMs / STATS.frames).toFixed(2), calls: i.render.calls,
+          gpuMsPerFrame: STATS.gpu && STATS.gpu.length ? +(STATS.gpu.reduce((a, b) => a + b, 0) / STATS.gpu.length).toFixed(2) : (STATS.tq === false ? 'no timer' : null),
+          triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, segments: segments.size, segmentBuildMs: STATS.buildMs.slice(-8) };
+        STATS.frames = 0; STATS.jsMs = 0; STATS.at = now; STATS.gpu = [];
+      }
+    }
+    rafId = requestAnimationFrame(frame);
+  }
+  if (STATS) window.__statsUncap = on => { STATS.uncapped = on; };
+  if (STATS) window.__triangles = () => {   // triangles drawn per kind of thing (instances × triangles each), largest first
+    const by = new Map();
+    scene.traverse(o => {
+      if (!o.isMesh || !o.visible) return;
+      const g = o.geometry, tris = (g.index ? g.index.count : g.attributes.position.count) / 3, n = o.isInstancedMesh ? o.count : 1;
+      const k = (o.material.name || o.material.type) + ' / ' + (g.name || g.type) + ` (${tris} each)`;
+      by.set(k, (by.get(k) || 0) + tris * n);
+    });
+    return [...by].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${Math.round(v).toLocaleString().padStart(9)}  ${k}`).join('\n');
+  };
+  function renderOnce() {
+    camera.position.set(P.x, P.y, P.z + EYE);
+    const cp = Math.cos(P.pitch);
+    look.set(P.x + cp * Math.cos(P.yaw), P.y + cp * Math.sin(P.yaw), P.z + EYE + Math.sin(P.pitch)); camera.lookAt(look);
+    renderer.render(scene, camera);
+  }
+  const LAYOUT = 2;   // bump when the world geometry changes so a carried-over position is discarded
+  function start(saved) {
+    const ok = saved && saved.layout === LAYOUT && typeof saved.x === 'number' && saved.x === clampWalkway(saved.x) && isFinite(saved.y);
+    if (ok) { Object.assign(P, saved); P.side = saved.side === 1 ? 1 : 0; P.z = 0; P.vz = 0; P.grounded = true; }
+    // ?at=x,y,yaw,pitch (degrees) sets the opening view: handy for screenshots of a scene that isn't running.
+    const at = (new URLSearchParams(location.search).get('at') || '').split(',').map(Number);
+    if (at.length === 4 && at.every(isFinite)) { P.x = clampWalkway(at[0]); P.y = at[1]; P.yaw = at[2] * Math.PI / 180; P.pitch = at[3] * Math.PI / 180; }
+    updateSegments(P.y, true); resize(); renderOnce(); syncRunning();
+  }
+  if (window.claude && window.claude.hot) {
+    window.claude.hot.snapshot(() => { const h = refFrame.home || P; return { layout: LAYOUT, x: h.x, y: h.y, yaw: h.yaw, pitch: h.pitch, floor: h.floor, side: h.side, fallen: P.fallen, dist: P.dist }; });
+    window.claude.hot.ready ? window.claude.hot.ready(start) : start(window.claude.hot.data || {});
+  } else start({});
+})();
+</script>
+</body>
+</html>
